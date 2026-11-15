@@ -5,10 +5,14 @@
   "scripts": {
     "start": "node server.js",
     "migrate": "node scripts/migrate.js",
-    "test": "node --test test/*.test.js",
+    "test": "npm run test:unit",
     "check": "node --check server.js && node --check public/app.js && node --check public/scoreboard.js && node --check scripts/migrate.js",
     "preflight": "sh scripts/preflight.sh",
-    "repo:check": "sh scripts/repository-check.sh"
+    "repo:check": "sh scripts/repository-check.sh",
+    "test:unit": "node --test test/*.test.js",
+    "test:e2e": "docker compose --profile test run --rm functional-test",
+    "test:privileges": "docker compose --profile test run --rm privilege-test",
+    "test:all": "npm run check && npm run test:unit && npm run test:e2e && npm run test:privileges"
   },
   "dependencies": {
     "html5-qrcode": "2.3.8",

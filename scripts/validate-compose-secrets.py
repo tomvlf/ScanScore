@@ -8,7 +8,8 @@ expected={
 'db':{'db_owner_password','db_runtime_password'},
 'migrate':{'owner_database_url'},
 'app':{'runtime_database_url','secret_pepper','qr_encryption_key'},
-'privilege-test':{'runtime_database_url'}}
+'privilege-test':{'runtime_database_url'},
+'functional-test':set()}
 for svc,want in expected.items():
     got=names(svc)
     if got!=want: raise SystemExit(f'{svc}: secrets {sorted(got)} != expected {sorted(want)}')

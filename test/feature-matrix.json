@@ -1,0 +1,10 @@
+{
+  "roomLifecycle": ["room creation", "duplicate room rejection", "host login", "wrong host password rejection"],
+  "participants": ["add person", "add team", "reject duplicate QR", "reject malformed participant"],
+  "scoring": ["fixed points", "place points", "unknown QR", "duplicate scan prevention", "place exhaustion", "idempotency", "undo", "next question"],
+  "rounds": ["initial round", "add round", "switch active context"],
+  "display": ["display login", "live score state", "display cannot mutate"],
+  "security": ["origin allowlist", "authentication timeout", "message size limit", "rate-limit hooks", "security headers", "parameterized SQL", "runtime database least privilege"],
+  "operations": ["health endpoint", "readiness endpoint", "migration tracking", "secret-file loading", "backup script", "compose secret separation"],
+  "ui": ["login form", "play navigation", "participant registration", "scoreboard navigation", "settings navigation", "scanner feedback", "responsive navigation", "public scoreboard"]
+}

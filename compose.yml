@@ -74,6 +74,21 @@ services:
     pids_limit: 100
     mem_limit: 384m
 
+  functional-test:
+    build: .
+    profiles: [test]
+    command: ["node", "test/functional-e2e.js"]
+    depends_on:
+      app: {condition: service_healthy}
+    environment:
+      APP_URL: http://app:8080
+      PUBLIC_ORIGIN: ${ALLOWED_ORIGINS:?Set ALLOWED_ORIGINS in .env}
+    networks: [backend]
+    read_only: true
+    tmpfs: ["/tmp:size=16m,noexec,nosuid,nodev"]
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+
   privilege-test:
     build: .
     profiles: [test]
