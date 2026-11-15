@@ -1,0 +1,23 @@
+{
+  "name": "scanscore-production",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "start": "node server.js",
+    "migrate": "node scripts/migrate.js",
+    "test": "node --test test/*.test.js",
+    "check": "node --check server.js && node --check public/app.js && node --check public/scoreboard.js && node --check scripts/migrate.js",
+    "preflight": "sh scripts/preflight.sh",
+    "repo:check": "sh scripts/repository-check.sh"
+  },
+  "dependencies": {
+    "html5-qrcode": "2.3.8",
+    "pg": "8.16.3",
+    "ws": "8.18.3"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "description": "Server-authoritative QR score app for physical games",
+  "license": "MIT"
+}

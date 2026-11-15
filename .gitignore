@@ -1,0 +1,13 @@
+.env
+.env.*
+!.env.example
+secrets/
+backups/
+*.dump
+*.dump.sha256
+node_modules/
+coverage/
+npm-debug.log*
+.DS_Store
+.vscode/
+.idea/

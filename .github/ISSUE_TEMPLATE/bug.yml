@@ -1,0 +1,32 @@
+name: Bugrapport
+description: Meld een reproduceerbaar probleem zonder secrets of persoonsgegevens
+title: '[Bug] '
+labels: bug
+body:
+  - type: markdown
+    attributes:
+      value: Deel nooit wachtwoorden, tokens, QR-codes of persoonsgegevens.
+  - type: input
+    id: version
+    attributes:
+      label: Versie
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Stappen om te reproduceren
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Verwacht gedrag
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Werkelijk gedrag
+    validations:
+      required: true

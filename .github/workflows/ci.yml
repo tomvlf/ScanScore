@@ -1,0 +1,25 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+      - run: npm test
+      - name: Validate Compose
+        run: |
+          mkdir -p secrets
+          for f in db_owner_password db_runtime_password owner_database_url runtime_database_url secret_pepper qr_encryption_key; do printf 'test' > "secrets/$f.txt"; done
+          printf 'ALLOWED_ORIGINS=https://quiz.example.test\n' > .env
+          docker compose config --quiet

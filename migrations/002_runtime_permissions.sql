@@ -1,0 +1,14 @@
+BEGIN;
+REVOKE ALL ON SCHEMA public FROM PUBLIC;
+REVOKE ALL ON SCHEMA public FROM scanscore_runtime;
+GRANT USAGE ON SCHEMA public TO scanscore_runtime;
+REVOKE ALL ON ALL TABLES IN SCHEMA public FROM scanscore_runtime;
+GRANT SELECT,INSERT,UPDATE,DELETE ON rooms,display_tokens,rounds,players,score_events,host_sessions,audit_events TO scanscore_runtime;
+REVOKE ALL ON schema_migrations FROM scanscore_runtime;
+REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM scanscore_runtime;
+GRANT USAGE,SELECT ON SEQUENCE audit_events_id_seq TO scanscore_runtime;
+ALTER DEFAULT PRIVILEGES FOR ROLE scanscore_owner IN SCHEMA public REVOKE ALL ON TABLES FROM PUBLIC;
+ALTER DEFAULT PRIVILEGES FOR ROLE scanscore_owner IN SCHEMA public GRANT SELECT,INSERT,UPDATE,DELETE ON TABLES TO scanscore_runtime;
+ALTER DEFAULT PRIVILEGES FOR ROLE scanscore_owner IN SCHEMA public REVOKE ALL ON SEQUENCES FROM PUBLIC;
+ALTER DEFAULT PRIVILEGES FOR ROLE scanscore_owner IN SCHEMA public GRANT USAGE,SELECT ON SEQUENCES TO scanscore_runtime;
+COMMIT;

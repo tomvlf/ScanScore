@@ -1,0 +1,10 @@
+services:
+  migrate:
+    image: ghcr.io/OWNER/scanscore:1.0.0
+    build: null
+  app:
+    image: ghcr.io/OWNER/scanscore:1.0.0
+    build: null
+  privilege-test:
+    image: ghcr.io/OWNER/scanscore:1.0.0
+    build: null

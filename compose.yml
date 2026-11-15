@@ -1,0 +1,101 @@
+name: scanscore
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: scanscore
+      POSTGRES_USER: scanscore_owner
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_owner_password
+      POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256 --auth-local=scram-sha-256
+    secrets:
+      - db_owner_password
+      - db_runtime_password
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./postgres-init:/docker-entrypoint-initdb.d:ro
+    networks: [backend]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U scanscore_owner -d scanscore"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,noexec,nosuid,nodev
+      - /run/postgresql:size=16m,noexec,nosuid,nodev
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETGID, SETUID]
+
+  migrate:
+    build: .
+    command: ["node", "scripts/migrate.js"]
+    depends_on:
+      db: {condition: service_healthy}
+    environment:
+      DATABASE_URL_FILE: /run/secrets/owner_database_url
+    secrets: [owner_database_url]
+    networks: [backend]
+    restart: "no"
+    read_only: true
+    tmpfs: ["/tmp:size=16m,noexec,nosuid,nodev"]
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+
+  app:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+    environment:
+      NODE_ENV: production
+      DATABASE_URL_FILE: /run/secrets/runtime_database_url
+      SECRET_PEPPER_FILE: /run/secrets/secret_pepper
+      QR_ENCRYPTION_KEY_FILE: /run/secrets/qr_encryption_key
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:?Set ALLOWED_ORIGINS in .env}
+      TRUST_PROXY: "1"
+      DB_POOL_MAX: "10"
+    secrets:
+      - runtime_database_url
+      - secret_pepper
+      - qr_encryption_key
+    networks: [backend]
+    ports: ["127.0.0.1:8088:8080"]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/readyz"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    read_only: true
+    tmpfs: ["/tmp:size=16m,noexec,nosuid,nodev"]
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    pids_limit: 100
+    mem_limit: 384m
+
+  privilege-test:
+    build: .
+    profiles: [test]
+    command: ["node", "test/runtime-privileges.js"]
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+    environment:
+      DATABASE_URL_FILE: /run/secrets/runtime_database_url
+    secrets: [runtime_database_url]
+    networks: [backend]
+    read_only: true
+    tmpfs: ["/tmp:size=16m,noexec,nosuid,nodev"]
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+
+secrets:
+  db_owner_password: {file: ./secrets/db_owner_password.txt}
+  db_runtime_password: {file: ./secrets/db_runtime_password.txt}
+  owner_database_url: {file: ./secrets/owner_database_url.txt}
+  runtime_database_url: {file: ./secrets/runtime_database_url.txt}
+  secret_pepper: {file: ./secrets/secret_pepper.txt}
+  qr_encryption_key: {file: ./secrets/qr_encryption_key.txt}
+volumes: {pgdata: {}}
+networks:
+  backend: {internal: true}
