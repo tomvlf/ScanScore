@@ -30,6 +30,7 @@ function cameraError(error){
  if(reason.includes('https_required'))return 'Open ScoreScan via HTTPS om de camera te gebruiken.';
  if(reason.includes('camera_unsupported'))return 'Deze browser ondersteunt geen cameratoegang. Open ScoreScan in Chrome of Safari.';
  if(reason.includes('scanner_unavailable'))return 'De QR-scanner kon niet laden. Vernieuw de pagina en probeer opnieuw.';
+ if(reason.includes('connection_closed'))return 'Verbinding verbroken. Meld je opnieuw aan voordat je een speler toevoegt.';
  if(/NotAllowed|SecurityError|Permission denied/i.test(reason))return 'Cameratoegang is geblokkeerd. Sta de camera toe in de site-instellingen van je browser.';
  if(/NotReadable|TrackStart|Could not start video source|in use/i.test(reason))return 'De camera is bezet. Sluit andere camera-apps of browsertabbladen en probeer opnieuw.';
  if(/NotFound|DevicesNotFound/i.test(reason))return 'Geen camera gevonden op dit apparaat.';
@@ -70,7 +71,7 @@ $('#pair').onclick=async()=>{
   await pairScanner.start({facingMode:'environment'},{fps:12,qrbox:230},code=>{
    if(paired)return;paired=true;
    cameraAction(async()=>{
-    await stopCameras();send({type:'player.add',name,playerType,code});$('#playerName').value='';
+    await stopCameras();if(ws?.readyState!==1)throw Error('connection_closed');send({type:'player.add',name,playerType,code});$('#playerName').value='';
     $('#pairStatus').textContent='QR-code gescand en verzonden.';toast('QR-code verzonden. Controleer de deelnemerslijst.');
    }).catch(error=>{$('#pairStatus').textContent=cameraError(error)});
   },()=>{});
