@@ -1,10 +1,12 @@
 'use strict';
-const fs=require('node:fs'),assert=require('node:assert/strict'),{Client}=require('pg');
-const url=fs.readFileSync(process.env.DATABASE_URL_FILE,'utf8').trim();
+const assert=require('node:assert/strict'),{Client}=require('pg');
+const url=process.env.DATABASE_URL;
+if(!url)throw new Error('DATABASE_URL is required');
 const client=new Client({connectionString:url,application_name:'runtime-privilege-test'});
 async function denied(sql){try{await client.query(sql);throw new Error(`Unexpectedly allowed: ${sql}`)}catch(e){if(e.message.startsWith('Unexpectedly allowed'))throw e;assert(['42501','42P01'].includes(e.code),`Expected privilege denial for ${sql}, got ${e.code}: ${e.message}`)}}
 (async()=>{await client.connect();
  const role=(await client.query('select current_user u')).rows[0].u;assert.equal(role,'scanscore_runtime');
+ const schema=(await client.query('select current_schema() s')).rows[0].s;assert.equal(schema,'public','runtime queries must resolve the public schema');
  const checks=(await client.query(`select
  has_database_privilege(current_user,'scanscore','CONNECT') connect,
  has_schema_privilege(current_user,'public','USAGE') usage,

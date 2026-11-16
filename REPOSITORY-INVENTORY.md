@@ -16,7 +16,7 @@
 Deze bestanden worden lokaal gegenereerd of bevatten gevoelige/operationele data:
 
 - `.env`
-- `secrets/`
+- `.env` (generated locally; contains runtime credentials)
 - `backups/`
 - PostgreSQL-volumegegevens
 - `node_modules/`

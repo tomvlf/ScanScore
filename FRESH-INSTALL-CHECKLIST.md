@@ -11,12 +11,12 @@
 - [ ] Production v7 plus deze v7.2-bestanden staan in één map.
 - [ ] `migrations/001_init.sql` en `002_runtime_permissions.sql` zijn aanwezig.
 - [ ] `postgres-init/001-security.sql` en `002-runtime-role.sh` zijn uitvoerbaar/leesbaar.
-- [ ] `.env`, `secrets/`, dumps en back-ups staan in `.gitignore`.
+- [ ] `.env`, dumps en back-ups staan in `.gitignore`.
 - [ ] Images en npm-dependencies zijn vastgezet en gescand in CI.
 
 ## 3. Secrets genereren
 - [ ] Voer `./scripts/generate-secrets.sh` uit.
-- [ ] Controleer dat alle bestanden in `secrets/` modus 600 hebben.
+- [ ] Controleer dat `.env` modus 600 heeft.
 - [ ] Bewaar owner- en runtimecredential afzonderlijk in de password manager.
 - [ ] Bewaar de pepper en QR-encryptiesleutel buiten de server in een herstelkluis.
 - [ ] Zet in `.env` exact `ALLOWED_ORIGINS=https://jouwdomein` zonder wildcard.
@@ -24,8 +24,8 @@
 ## 4. Preflight
 - [ ] Voer `./scripts/preflight.sh` uit.
 - [ ] `docker compose config --quiet` slaagt.
-- [ ] De app ontvangt geen ownersecret.
-- [ ] De migratieservice ontvangt geen runtimesecret.
+- [ ] De app ontvangt geen ownercredential.
+- [ ] De migratieservice ontvangt geen runtimecredential.
 - [ ] De database publiceert geen poort.
 - [ ] Het backendnetwerk is intern.
 
