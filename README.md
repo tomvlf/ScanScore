@@ -204,15 +204,24 @@ Open je publieke ScoreScan-adres en doorloop deze controle:
 
 Vul in het startscherm in:
 
-- een uniek ruimte-ID, bijvoorbeeld `familiequiz` (3–40 kleine letters, cijfers, `_` of `-`, beginnend met een letter of cijfer);
-- de naam van de quiz;
+- een unieke ruimtenaam van maximaal 80 tekens, bijvoorbeeld `Familiequiz`;
 - een hostwachtwoord van minstens 12 tekens of 8–16 cijfers.
 
-Na het aanmaken toont ScoreScan een **displaytoken**. Bewaar dit veilig. Het token geeft alleen leestoegang tot het publieke scorebord.
+Klik op **Ruimte maken**. Je wordt automatisch aangemeld met de gekozen
+ruimtenaam en het wachtwoord. Om later terug te keren vul je dezelfde naam en
+hetzelfde wachtwoord in en klik je op **Aanmelden**. Hoofdletters in de
+ruimtenaam maken geen verschil; spaties aan het begin en einde worden genegeerd.
 
-Bestaat het ruimte-ID al? Kies een ander ruimte-ID voor een nieuwe ruimte.
-Alleen de quiznaam wijzigen maakt geen nieuwe ruimte. Gebruik **Verbinden** met
-het oorspronkelijke hostwachtwoord om een bestaande ruimte opnieuw te openen.
+Bestaat de ruimtenaam al? Kies een andere naam voor een nieuwe ruimte, of meld
+je aan met het oorspronkelijke wachtwoord. Bestaande ruimtes behouden hun
+wachtwoord en spelgegevens. Hun quiznaam wordt de aanmeldnaam; bij dubbele
+quiznamen of een conflict met een bestaand ruimte-ID blijft het oude ruimte-ID
+de aanmeldnaam.
+
+Het gegenereerde **displaytoken** vind je direct na het maken onder
+**Meer → Publiek scorebord**. Bewaar dit veilig. Het geeft alleen leestoegang
+tot het publieke scorebord en kan niet worden gebruikt om als quizmaster aan
+te melden. Een gegenereerd ruimte-ID is evenmin een hostaanmeldnaam.
 
 ## Deelnemers registreren
 
