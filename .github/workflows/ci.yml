@@ -19,7 +19,13 @@ jobs:
       - run: npm test
       - name: Validate Compose
         run: |
-          mkdir -p secrets
-          for f in db_owner_password db_runtime_password owner_database_url runtime_database_url secret_pepper qr_encryption_key; do printf 'test' > "secrets/$f.txt"; done
-          printf 'ALLOWED_ORIGINS=https://quiz.example.test\n' > .env
-          docker compose config --quiet
+          cat > .env <<'EOF'
+          ALLOWED_ORIGINS=https://quiz.example.test
+          DB_OWNER_PASSWORD=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+          DB_RUNTIME_PASSWORD=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+          OWNER_DATABASE_URL=postgresql://scanscore_owner:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa@db:5432/scanscore
+          RUNTIME_DATABASE_URL=postgresql://scanscore_runtime:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb@db:5432/scanscore
+          SECRET_PEPPER=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+          QR_ENCRYPTION_KEY=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+          EOF
+          sh scripts/preflight.sh

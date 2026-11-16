@@ -1,7 +1,7 @@
 # ScanScore Production v7
 
 ## Installatie
-1. Voer `./scripts/generate-secrets.sh` uit.
+1. Voer `./scripts/generate-secrets.sh` uit. De benodigde omgevingsvariabelen met geheimen komen in `.env` (permissies `0600`).
 2. Vervang `ALLOWED_ORIGINS` in `.env` door het exacte HTTPS-domein.
 3. Start met `docker compose up -d --build`.
 4. Publiceer uitsluitend `127.0.0.1:8088` via een HTTPS-reverse-proxy met WebSocket-upgrade.

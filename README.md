@@ -70,14 +70,12 @@ Vervang `JOUW-GEBRUIKER` door je GitHub-gebruikersnaam of organisatie.
 
 Dit maakt lokaal aan:
 
-- `.env`;
-- een database-ownerwachtwoord;
-- een afzonderlijk runtimewachtwoord;
+- `.env` met alle benodigde omgevingsvariabelen;
+- een database-ownerwachtwoord en een afzonderlijk runtimewachtwoord;
 - databaseverbindingen voor beide rollen;
-- een server-pepper;
-- een QR-encryptiesleutel.
+- een server-pepper en QR-encryptiesleutel.
 
-De gegenereerde bestanden staan in `secrets/` en worden door Git genegeerd. **Commit deze bestanden nooit.**
+Het bestand `.env` bevat geheimen, wordt door Git genegeerd en krijgt permissies `0600`. **Commit dit bestand nooit.**
 
 ## 3. Publiek domein instellen
 

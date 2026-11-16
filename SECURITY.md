@@ -14,6 +14,6 @@ Vermeld waar mogelijk de versie, impact, reproduceerbare stappen en een veilige 
 
 - Gebruik uitsluitend HTTPS/WSS.
 - Publiceer PostgreSQL en poort 8088 niet rechtstreeks op internet.
-- Bewaar `secrets/`, `.env` en back-ups buiten Git.
+- Bewaar `.env` en back-ups buiten Git en beperk `.env` tot permissies `0600`.
 - Roteer credentials na een vermoedelijke blootstelling.
 - Voer dependency-, image- en restorechecks periodiek uit.
