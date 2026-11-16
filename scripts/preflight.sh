@@ -13,6 +13,6 @@ grep -Eq '^DB_RUNTIME_PASSWORD=[A-Fa-f0-9]{64,}$' .env || fail 'runtime password
 grep -Eq '^QR_ENCRYPTION_KEY=[A-Za-z0-9+/]{43}=$' .env || fail 'QR encryption key must be base64 for 32 bytes'
 grep -Eq '^ALLOWED_ORIGINS=https://[^ ]+$' .env || fail 'ALLOWED_ORIGINS must be one exact HTTPS origin'
 if grep -q 'quiz.example.be' .env; then fail 'replace the example origin'; fi
-docker compose config --quiet || fail 'Compose configuration invalid'
-docker compose config --format json | python3 scripts/validate-compose-env.py
+docker compose --profile test config --quiet || fail 'Compose configuration invalid'
+docker compose --profile test config --format json | python3 scripts/validate-compose-env.py
 ok 'Compose environment wiring and service separation verified'
