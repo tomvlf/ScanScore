@@ -204,11 +204,15 @@ Open je publieke ScoreScan-adres en doorloop deze controle:
 
 Vul in het startscherm in:
 
-- een herkenbare ruimte-ID, bijvoorbeeld `familiequiz`;
+- een uniek ruimte-ID, bijvoorbeeld `familiequiz` (3–40 kleine letters, cijfers, `_` of `-`, beginnend met een letter of cijfer);
 - de naam van de quiz;
 - een hostwachtwoord van minstens 12 tekens of 8–16 cijfers.
 
 Na het aanmaken toont ScoreScan een **displaytoken**. Bewaar dit veilig. Het token geeft alleen leestoegang tot het publieke scorebord.
+
+Bestaat het ruimte-ID al? Kies een ander ruimte-ID voor een nieuwe ruimte.
+Alleen de quiznaam wijzigen maakt geen nieuwe ruimte. Gebruik **Verbinden** met
+het oorspronkelijke hostwachtwoord om een bestaande ruimte opnieuw te openen.
 
 ## Deelnemers registreren
 
