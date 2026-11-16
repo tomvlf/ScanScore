@@ -229,6 +229,12 @@ te melden. Een gegenereerd ruimte-ID is evenmin een hostaanmeldnaam.
 2. Vul de naam in.
 3. Kies **Persoon** of **Ploeg**.
 4. Kies **Camera openen en QR koppelen**.
+
+Bij het wisselen van scherm stopt de actieve scanner, zodat de puntenscanner
+en de spelersscanner de camera niet tegelijk vasthouden. Start de gewenste
+scanner opnieuw op het nieuwe scherm. Cameraproblemen blijven bij de
+spelersscanner zichtbaar; controleer bij een blokkering de cameratoestemming
+in de site-instellingen van je browser en gebruik het HTTPS-adres van de app.
 5. Scan de fysieke QR-kaart.
 
 De kaart is daarna aan die deelnemer gekoppeld.
