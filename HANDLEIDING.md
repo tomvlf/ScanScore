@@ -1,4 +1,4 @@
-# ScanScore Production v7
+# ScoreScan Production v7
 
 ## Installatie
 1. Voer `./scripts/generate-secrets.sh` uit. De benodigde omgevingsvariabelen met geheimen komen in `.env` (permissies `0600`).

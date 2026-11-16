@@ -1,8 +1,8 @@
-# ScanScore
+# ScoreScan
 
 **Scan fysieke QR-kaarten, ken automatisch punten toe en toon het klassement live op een tweede scherm.**
 
-ScanScore is een selfhosted webapp voor quizzen, spellen en activiteiten waarbij deelnemers een persoonlijke QR-code gebruiken. De quizmaster scant de winnaar; de server controleert de actie, kent de juiste punten toe en werkt het publieke scorebord onmiddellijk bij.
+ScoreScan is een selfhosted webapp voor quizzen, spellen en activiteiten waarbij deelnemers een persoonlijke QR-code gebruiken. De quizmaster scant de winnaar; de server controleert de actie, kent de juiste punten toe en werkt het publieke scorebord onmiddellijk bij.
 
 ## Wat kun je ermee?
 
@@ -22,12 +22,12 @@ ScanScore is een selfhosted webapp voor quizzen, spellen en activiteiten waarbij
 2. Iedere deelnemer wordt eenmaal aan een QR-kaart gekoppeld.
 3. De quizmaster kiest de ronde, vraag en puntverdeling.
 4. Winnaars tonen hun QR-kaart en worden in volgorde gescand.
-5. ScanScore verwerkt de punten en synchroniseert het scorebord.
+5. ScoreScan verwerkt de punten en synchroniseert het scorebord.
 6. Na de vraag kiest de quizmaster **Volgende vraag**.
 
 ## Opbouw
 
-ScanScore bestaat uit vier services:
+ScoreScan bestaat uit vier services:
 
 - **app**: de webinterface en server-authoritative spellogica;
 - **db**: PostgreSQL voor spelruimtes, deelnemers, score-events en auditgegevens;
@@ -184,7 +184,7 @@ Publiceer poort `8088` niet rechtstreeks op internet. Gebruik de toepassing in p
 
 ## 8. Eerste functionele test
 
-Open je publieke ScanScore-adres en doorloop deze controle:
+Open je publieke ScoreScan-adres en doorloop deze controle:
 
 1. Maak een tijdelijke quizruimte.
 2. Bewaar het eenmalig getoonde displaytoken.
@@ -198,7 +198,7 @@ Open je publieke ScanScore-adres en doorloop deze controle:
 
 ---
 
-# ScanScore gebruiken
+# ScoreScan gebruiken
 
 ## Een spelruimte maken
 
@@ -208,7 +208,7 @@ Vul in het startscherm in:
 - de naam van de quiz;
 - een hostwachtwoord van minstens 12 tekens of 8–16 cijfers.
 
-Na het aanmaken toont ScanScore een **displaytoken**. Bewaar dit veilig. Het token geeft alleen leestoegang tot het publieke scorebord.
+Na het aanmaken toont ScoreScan een **displaytoken**. Bewaar dit veilig. Het token geeft alleen leestoegang tot het publieke scorebord.
 
 ## Deelnemers registreren
 
@@ -417,4 +417,4 @@ Meld beveiligingsproblemen privé. Plaats nooit wachtwoorden, displaytokens, QR-
 
 ## Licentie
 
-ScanScore wordt gepubliceerd onder de [MIT-licentie](LICENSE).
+ScoreScan wordt gepubliceerd onder de [MIT-licentie](LICENSE).

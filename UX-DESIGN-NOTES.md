@@ -1,4 +1,4 @@
-# ScanScore v8 UI/UX
+# ScoreScan v8 UI/UX
 
 ## Primair ontwerpdoel
 Tijdens het spel moet de quizmaster bijna uitsluitend drie dingen zien: actieve ronde/vraag, camera en bevestiging. Beheerfuncties zijn naar aparte pagina's verplaatst.
