@@ -29,3 +29,4 @@ jobs:
           QR_ENCRYPTION_KEY=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
           EOF
           sh scripts/preflight.sh
+          COMPOSE_FILE=compose.yml:compose.ghcr.example.yml sh scripts/preflight.sh
