@@ -41,7 +41,7 @@ De applicatie gebruikt een afzonderlijke, beperkt bevoegde databasegebruiker. Po
 Voor een productie-installatie heb je nodig:
 
 - een Linuxserver met Docker Engine;
-- Docker Compose v2;
+- Docker Compose v2.24.4 of nieuwer;
 - `openssl`;
 - Python 3;
 - een domeinnaam;
@@ -56,11 +56,9 @@ De app wordt lokaal aangeboden op `127.0.0.1:8088`. PostgreSQL publiceert geen p
 ## 1. Repository ophalen
 
 ```bash
-git clone https://github.com/JOUW-GEBRUIKER/scanscore.git
-cd scanscore
+git clone https://github.com/tomvlf/ScanScore.git
+cd ScanScore
 ```
-
-Vervang `JOUW-GEBRUIKER` door je GitHub-gebruikersnaam of organisatie.
 
 ## 2. Secrets genereren
 
@@ -118,9 +116,35 @@ Los eventuele foutmelding eerst op voordat je verdergaat.
 
 ## 5. Stack starten
 
+Gebruik de automatisch gebouwde Docker-image zonder lokaal te bouwen:
+
+```bash
+export COMPOSE_FILE=compose.yml:compose.ghcr.example.yml
+./scripts/preflight.sh
+docker compose pull
+docker compose up -d --no-build
+```
+
+De image `ghcr.io/tomvlf/scanscore:latest` wordt na iedere push naar `main`
+gepubliceerd voor `linux/amd64` en `linux/arm64`, net als bij Athlima.
+De eerste build moet voltooid zijn voordat je de image kunt ophalen.
+Er zijn ook vaste tags `sha-<volledige-commit-SHA>` en versietags zoals `1.0.0`.
+Stel desgewenst `SCANSCORE_IMAGE_TAG` in `.env` in om een specifieke build te gebruiken.
+Een release-tag vervangt `latest` niet.
+
+Maak het containerpakket na de eerste publicatie publiek via de pakketinstellingen
+op GitHub als installeren zonder login gewenst is. Voor een privaat pakket moet
+je eerst bij `ghcr.io` inloggen met een token met `read:packages`-toegang.
+
+Wil je in plaats daarvan lokaal bouwen, laat `COMPOSE_FILE` dan weg:
+
 ```bash
 docker compose up -d --build
 ```
+
+Voer bij een nieuwe shell opnieuw `export COMPOSE_FILE=compose.yml:compose.ghcr.example.yml`
+uit als je de gepubliceerde images gebruikt. Zo gebruiken ook de migratie- en testservices
+dezelfde image zonder lokale build.
 
 Bekijk daarna de toestand:
 
@@ -235,7 +259,18 @@ docker compose start
 
 ## Bijwerken vanuit Git
 
-Maak eerst een back-up. Haal daarna de nieuwe versie op en bouw de containers opnieuw:
+Maak eerst een back-up. Haal daarna de nieuwe configuratie en gepubliceerde image op:
+
+```bash
+git pull --ff-only
+export COMPOSE_FILE=compose.yml:compose.ghcr.example.yml
+./scripts/preflight.sh
+docker compose pull
+docker compose up -d --no-build
+```
+
+Gebruik je een vaste `SCANSCORE_IMAGE_TAG`, werk die dan eerst bij in `.env`.
+Voor een lokale build gebruik je in plaats daarvan:
 
 ```bash
 git pull --ff-only
@@ -361,7 +396,9 @@ test/            statische en integratietests
 .github/         CI, containerrelease en Dependabot
 ```
 
-Een release-tag zoals `v1.0.0` activeert de containerworkflow voor GitHub Container Registry.
+Elke push naar `main` publiceert `ghcr.io/tomvlf/scanscore:latest` en een
+`sha-<volledige-commit-SHA>`-tag via GitHub Actions. Een release-tag zoals `v1.0.0`
+publiceert daarnaast de versietags `1.0.0` en `1.0` in GitHub Container Registry.
 
 ---
 
