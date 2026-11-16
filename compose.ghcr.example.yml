@@ -1,10 +1,13 @@
 services:
   migrate:
-    image: ghcr.io/OWNER/scanscore:1.0.0
-    build: null
+    image: ghcr.io/tomvlf/scanscore:${SCANSCORE_IMAGE_TAG:-latest}
+    build: !reset null
   app:
-    image: ghcr.io/OWNER/scanscore:1.0.0
-    build: null
+    image: ghcr.io/tomvlf/scanscore:${SCANSCORE_IMAGE_TAG:-latest}
+    build: !reset null
+  functional-test:
+    image: ghcr.io/tomvlf/scanscore:${SCANSCORE_IMAGE_TAG:-latest}
+    build: !reset null
   privilege-test:
-    image: ghcr.io/OWNER/scanscore:1.0.0
-    build: null
+    image: ghcr.io/tomvlf/scanscore:${SCANSCORE_IMAGE_TAG:-latest}
+    build: !reset null
