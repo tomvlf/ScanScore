@@ -137,6 +137,18 @@ test('question navigation and winner corrections carry the displayed game and qu
   {type:'winner.remove',gameId:'game',questionId:'q2',playerId:'alice'}
  ]);
  assert.match($('#poolInfo').textContent,/50.*1 winnaar.*50/);
+ assert.equal($('#play').classList.contains('is-playing'),true);
+ assert.equal($('#playActions').classList.contains('hidden'),false);
+ assert.equal($('#nextHint').textContent,'1 winnaar gescand');
+ $('#next').onclick();
+ assert.deepEqual(socket.messages[2],{type:'question.next',gameId:'game',questionId:'q2'});
+ socket.onmessage({data:JSON.stringify({type:'state',state:{
+  games:[],activeGameId:'game',game:{id:'game',question:3,questions:[{id:'q3',ordinal:3,points:50,winners:[]}]},
+  players:[],revision:3
+ }})});
+ assert.equal($('#playTitle').textContent,'Vraag 3');
+ assert.equal($('#nextHint').textContent,'Klaar met scannen?');
+ assert.match($('#feedback').innerHTML,/Vraag 3/);
 });
 
 test('stopped games are read-only while player registration remains available',async()=>{
@@ -148,6 +160,8 @@ test('stopped games are read-only while player registration remains available',a
  assert.equal($('#next').disabled,true);
  assert.equal($('#start').disabled,true);
  assert.equal($('#gameForm').classList.contains('hidden'),false);
+ assert.equal($('#play').classList.contains('is-playing'),false);
+ assert.equal($('#playActions').classList.contains('hidden'),true);
  await $('#start').onclick();
  assert.match($('#toast').textContent,/Start eerst een spel/);
  assert.equal(sockets[0].messages.length,0);

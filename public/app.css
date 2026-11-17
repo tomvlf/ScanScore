@@ -2,5 +2,34 @@
 @media(max-width:950px){.app{grid-template-columns:1fr}.rail{display:none}.playgrid{grid-template-columns:1fr}.login{grid-template-columns:1fr}.auth{max-width:none;justify-self:stretch}.mobile:not(.hidden){display:grid;grid-template-columns:repeat(4,1fr);position:fixed;bottom:calc(10px + env(safe-area-inset-bottom));left:10px;right:10px;z-index:50;padding:6px;background:#ffffffee;backdrop-filter:blur(15px);border:1px solid var(--line);border-radius:19px;box-shadow:0 18px 50px #17182733}.mobile button{background:transparent;color:var(--muted);box-shadow:none;min-height:53px;padding:.3rem;display:grid;place-items:center}.mobile small{display:block}.mobile button.active{background:var(--soft);color:var(--brand)}}
 @media(max-width:650px){header{height:62px}.brand small{display:none}main{padding:17px 11px 105px}.intro{display:none}.login{min-height:auto}.auth{padding:19px}.pagehead{align-items:flex-start}.next{position:fixed;bottom:calc(78px + env(safe-area-inset-bottom));left:11px;right:11px;z-index:45}.fields{grid-template-columns:1fr 90px}.fields label:nth-child(3){grid-column:1/-1}.contextfoot,.sectionhead{align-items:flex-start;flex-direction:column}.sectionhead .row,.sectionhead button{width:100%}.two,.twocards{grid-template-columns:1fr}.card{padding:16px;border-radius:18px}.tip{display:none}.playergrid{grid-template-columns:1fr}.pagehead h1{font-size:2rem}.pill{display:none}}
 #pairReader:empty{display:block;visibility:hidden;margin-top:0}
-.game-start,.question-controls{display:grid;gap:1rem;margin-bottom:18px}.game-start h2{margin:0}.game-start label{max-width:380px}.game-start>.primary{justify-self:start}.danger{color:var(--bad)}button:disabled{opacity:.5;cursor:not-allowed;box-shadow:none}.question-controls .row>button{flex:1}.winners .remove-winner{grid-column:2/-1;justify-self:end;min-height:44px;padding:.4rem .7rem}.scoretable{overflow:auto;max-width:100%;margin-top:1rem;text-align:left}.scoretable table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}.scoretable caption{text-align:left;font-weight:800;padding:.6rem}.scoretable td,.scoretable th{padding:.8rem;border-bottom:1px solid var(--line);white-space:nowrap}.scoretable td{text-align:right}.board-controls{display:flex;flex-wrap:wrap;justify-content:center;gap:1rem;margin:1.5rem 0;text-align:left!important}.board-controls label{min-width:220px}
+.scanner h2{margin:0;font-size:1.2rem}.play-actions{display:flex;align-items:center;justify-content:space-between;gap:1rem;margin:18px 0;padding:14px 18px;border:1px solid var(--line);border-radius:18px;background:var(--card)}.play-actions>span{font-size:.85rem;color:var(--muted)}.play-actions>button{min-height:56px;min-width:190px}.question-controls>summary{cursor:pointer;min-height:44px;align-content:center;font-weight:800}.question-controls>summary:focus-visible{outline:3px solid #f59e0b;outline-offset:3px}.question-options{display:grid;gap:1rem;padding-top:1rem}
+@media(max-width:650px){
+ body:has(#app:not(.hidden) #play.is-playing.active)>header{height:48px}
+ body:has(#app:not(.hidden) #play.is-playing.active)>header .brand>b{width:32px;height:32px;border-radius:10px}
+ body:has(#app:not(.hidden) #play.is-playing.active)>header button{min-height:44px;font-size:.8rem;padding:.4rem .65rem}
+ body:has(#app:not(.hidden) #play.is-playing.active) main{padding-top:10px}
+ #play.is-playing{padding-bottom:85px}
+ #play.is-playing>.pagehead{margin-bottom:10px}
+ #play.is-playing>.pagehead .eyebrow,#play.is-playing #gameStatus{display:none}
+ #play.is-playing #playTitle{font-size:1.4rem;margin:0}
+ #play.is-playing #poolInfo{font-size:.78rem;margin:2px 0 0}
+ #play .scanner{padding:12px}
+ #play .scanner .sectionhead{flex-direction:row;align-items:center;gap:8px}
+ #play .scanner h2{font-size:1.05rem}
+ #play .scanner .sectionhead .row{width:auto;flex-shrink:0}
+ #play .scanner .sectionhead button{width:auto;min-height:44px;padding:.5rem .65rem;font-size:.8rem}
+ #play.is-playing #reader{width:min(100%,max(140px,calc(100svh - 430px - env(safe-area-inset-bottom))));margin-top:8px}
+ #play .feedback{margin-top:8px;padding:8px;gap:8px}
+ #play .feedback>b{width:32px;height:32px;flex-shrink:0;border-radius:10px}
+ #play .feedback>div{min-width:0}
+ #play .feedback strong{font-size:.9rem}
+ #play .feedback p{font-size:.78rem;line-height:1.3}
+ #play #undo{min-height:44px;font-size:.82rem}
+ #play .play-actions{position:fixed;left:10px;right:10px;bottom:calc(87px + env(safe-area-inset-bottom));z-index:45;margin:0;padding:8px 10px;gap:8px;box-shadow:0 6px 24px #17182722}
+ #play .play-actions>button{min-width:0;flex:1;font-size:1rem;white-space:nowrap}
+ #play .play-actions>span{max-width:85px;flex-shrink:0;font-size:.78rem}
+ .question-controls{margin-top:18px}
+ body:has(#app:not(.hidden) #play.is-playing.active) .toast{bottom:calc(175px + env(safe-area-inset-bottom))}
+}
+.game-start{display:grid;gap:1rem;margin-bottom:18px}.game-start h2{margin:0}.game-start label{max-width:380px}.game-start>.primary{justify-self:start}.danger{color:var(--bad)}button:disabled{opacity:.5;cursor:not-allowed;box-shadow:none}.question-controls .row>button{flex:1}.winners .remove-winner{grid-column:2/-1;justify-self:end;min-height:44px;padding:.4rem .7rem}.scoretable{overflow:auto;max-width:100%;margin-top:1rem;text-align:left}.scoretable table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}.scoretable caption{text-align:left;font-weight:800;padding:.6rem}.scoretable td,.scoretable th{padding:.8rem;border-bottom:1px solid var(--line);white-space:nowrap}.scoretable td{text-align:right}.board-controls{display:flex;flex-wrap:wrap;justify-content:center;gap:1rem;margin:1.5rem 0;text-align:left!important}.board-controls label{min-width:220px}
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;scroll-behavior:auto!important}}@media(prefers-color-scheme:dark){:root{color-scheme:dark;--bg:#10111c;--card:#191a27;--ink:#f4f2ff;--muted:#aaa9ba;--line:#30313f;--soft:#2b264e;--oksoft:#123a2e;--badsoft:#3d1721;--shadow:0 18px 50px #0005}body{background:radial-gradient(circle at 10% 0,#251e50 0,transparent 30rem),var(--bg)}header{background:#191a27dd}.card,.playercard,.chips span,.nav.active{background:var(--card)}input,select{background:#11121d;color:var(--ink)}.mobile:not(.hidden){background:#191a27ee}}

@@ -16,7 +16,8 @@ function browser({startGate,failOnce,secure=true,lateScanningFlag=false}={}){
  class Html5Qrcode{
   constructor(id){this.id=id;this.isScanning=false;this.state=1;instances.push(this)}
   getState(){return this.state}
-  async start(_camera,_config,onScan){
+  async start(_camera,config,onScan){
+   this.config=config;
    events.push('start:'+this.id);requested();this.onScan=onScan;
    if(active)throw Object.assign(Error('Camera in use'),{name:'NotReadableError'});
    if(instances.length===1&&startGate)await startGate;
@@ -34,6 +35,7 @@ function browser({startGate,failOnce,secure=true,lateScanningFlag=false}={}){
   console:{warn(){}},scrollTo(){},setTimeout(){},clearTimeout(){},
   socket:{readyState:1,send(message){messages.push(JSON.parse(message))}}
  });
+ vm.runInContext(fs.readFileSync('public/scores.js','utf8'),context);
  vm.runInContext(source,context);vm.runInContext('ws=socket;state={activeGameId:"game",game:{id:"game",question:1,questions:[{id:"q1",ordinal:1}]}}',context);
  $('#playerName').value='Alice';$('#playerType').value='person';
  return {$,context,events,instances,messages,started,get active(){return active},idle(){return vm.runInContext('cameraTask',context)}};
@@ -89,4 +91,29 @@ test('pairing submits a QR code once and releases the camera',async()=>{
  assert.equal(app.active,null);
  assert.equal($('#playerName').value,'');
  assert.match($('#pairStatus').textContent,/QR-code gescand en verzonden/);
+});
+
+test('scoring scan area fits the smaller mobile camera viewport',async()=>{
+ const app=browser();
+ await app.$('#start').onclick();
+ for(const [width,height] of [[180,180],[240,320],[640,480]]){
+  const box=app.active.config.qrbox(width,height);
+  assert.ok(box.width>=50&&box.width<width);
+  assert.ok(box.height>=50&&box.height<height);
+  assert.equal(box.width,box.height);
+ }
+});
+
+test('advancing a question clears old scan feedback without restarting the camera',async()=>{
+ const app=browser();
+ vm.runInContext('state={games:[],players:[],activeGameId:"game",game:{id:"game",question:1,questions:[{id:"q1",ordinal:1,points:50,winners:[]}]}};render()',app.context);
+ await app.$('#start').onclick();
+ const scanner=app.active;
+ app.$('#feedback').innerHTML='Old scan result';
+ app.$('#next').onclick();
+ assert.deepEqual(app.messages,[{type:'question.next',gameId:'game',questionId:'q1'}]);
+ vm.runInContext('state.game.question=2;state.game.questions.push({id:"q2",ordinal:2,points:50,winners:[]});render()',app.context);
+ assert.equal(app.active,scanner);
+ assert.deepEqual(app.events,['start:reader']);
+ assert.match(app.$('#feedback').innerHTML,/Vraag 2.*Scan de eerste winnaar/);
 });

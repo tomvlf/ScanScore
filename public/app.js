@@ -11,17 +11,23 @@ function gameAction(type,extra={}){
 function render(){
  if(!state)return;
  const game=state.game,question=currentQuestion(),winners=question?.winners||[],editable=canScore();
- if(lastQuestionId!==question?.id){lastQuestionId=question?.id;lastScan='';lastAt=0}
+ if(lastQuestionId!==question?.id){
+  if(lastQuestionId&&editable)feedback('ready',`Vraag ${game.question}`,scanner?'Scan de eerste winnaar.':'Start de camera en scan een winnaar.');
+  lastQuestionId=question?.id;lastScan='';lastAt=0;
+ }
+ $('#play').classList.toggle('is-playing',editable);
+ $('#playActions').classList.toggle('hidden',!editable);
+ $('#nextHint').textContent=winners.length?`${winners.length} ${winners.length===1?'winnaar':'winnaars'} gescand`:'Klaar met scannen?';
  $('#gameForm').classList.toggle('hidden',!!state.activeGameId);
  $('#gameControls').classList.toggle('hidden',!game);
  $('#returnToGame').classList.toggle('hidden',!state.activeGameId||editable);
- $('#playTitle').textContent=game?`${game.endedAt?'Gestopt spel':'Spel'} · Vraag ${game.question}`:'Nog geen spel';
+ $('#playTitle').textContent=game?`${editable?'':'Gestopt spel · '}Vraag ${game.question}`:'Nog geen spel';
  $('#gameStatus').textContent=game?(game.legacy?'Historische scores uit de vorige versie.':game.endedAt?'Dit spel is gestopt. De scores blijven bewaard.':'Scan alle winnaars en ga daarna naar de volgende vraag.'):'Voeg spelers toe en start een spel.';
  $('#questionSelect').innerHTML=(game?.questions||[]).map(q=>`<option value="${q.id}">${esc(q.label||'Vraag '+q.ordinal)}</option>`).join('');
  $('#questionSelect').value=question?.id||'';$('#questionSelect').disabled=!editable;
  $('#previous').disabled=!editable||game.question===1;$('#next').disabled=!editable;$('#stopGame').disabled=!editable;
  $('#start').disabled=!editable;$('#undo').disabled=!editable||!winners.length;
- $('#poolInfo').textContent=question?.points?`Puntenpot: ${formatPoints(question.points)} · ${winners.length} winnaar(s) · ${formatPoints(winners.length?question.points/winners.length:0)} per winnaar`:'';
+ $('#poolInfo').textContent=question?.points?`${formatPoints(question.points)} punten · ${winners.length} ${winners.length===1?'winnaar':'winnaars'} · ${formatPoints(winners.length?question.points/winners.length:0)} per winnaar`:'';
  $('#winnerCount').textContent=winners.length;
  $('#winners').innerHTML=winners.length?winners.map((w,i)=>{
   const player=state.players.find(p=>p.id===w.playerId);
@@ -55,7 +61,7 @@ async function connect(name=$('#roomName').value.trim(),password=$('#secret').va
    if(m.state.revision<state.revision)return;
    state=m.state;render();
   }else if(m.type==='scan.result'){
-   if(m.ok){feedback('success',m.name,`Nu ${formatPoints(m.points)} punten per winnaar (${m.winnerCount} winnaars). De verdeling wordt live herberekend.`);navigator.vibrate?.([55,35,80]);confetti()}
+   if(m.ok){feedback('success',m.name,`${formatPoints(m.points)} punten elk · ${m.winnerCount} ${m.winnerCount===1?'winnaar':'winnaars'}.`);navigator.vibrate?.([55,35,80]);confetti()}
    else{feedback('error','Niet toegevoegd',{duplicate:'Deze speler is al winnaar van deze vraag.',unknown:'Deze QR-code is nog niet gekoppeld aan een speler.'}[m.code]||'De scan kon niet verwerkt worden.');navigator.vibrate?.(180)}
   }else if(m.type==='error'){
    const message={input:'Controleer je invoer.',duplicate_qr:'Deze QR-code is al gekoppeld aan een speler.',game_running:'Er loopt al een spel in deze ruimte.',no_active_game:'Dit spel loopt niet meer. Open het actieve spel of start een nieuw spel.',stale_question:'De vraag is gewijzigd. Controleer de huidige vraag en scan opnieuw.',question_limit:'Het maximum van 10.000 vragen is bereikt.',duplicate_request:'Deze scan is al verwerkt.',nothing:'Er is geen scan om ongedaan te maken.'}[m.reason]||'Actie geweigerd. Vernieuw de pagina en probeer opnieuw.';
@@ -164,9 +170,9 @@ $('#start').onclick=async()=>{
  $('#start').disabled=true;
  try{await cameraAction(async()=>{
   await stopCameras();cameraPreflight();scanner=new Html5Qrcode('reader');
-  await scanner.start({facingMode:'environment'},{fps:15,qrbox:{width:240,height:240}},code=>{const now=Date.now();if(code===lastScan&&now-lastAt<1200)return;lastScan=code;lastAt=now;gameAction('scan.award',{code,idempotencyKey:crypto.randomUUID()})},()=>{});
+  await scanner.start({facingMode:'environment'},{fps:15,aspectRatio:1,qrbox:(width,height)=>{const size=Math.min(240,Math.floor(Math.min(width,height)*.8));return {width:size,height:size}}},code=>{const now=Date.now();if(code===lastScan&&now-lastAt<1200)return;lastScan=code;lastAt=now;gameAction('scan.award',{code,idempotencyKey:crypto.randomUUID()})},()=>{});
   await cameraReady(scanner,'reader');
-  $('#start').classList.add('hidden');$('#stop').classList.remove('hidden');feedback('ready','Scanner actief','Laat de winnaar zijn QR-code in beeld houden.');
+  $('#start').classList.add('hidden');$('#stop').classList.remove('hidden');feedback('ready','Scanner actief','Scan een persoonlijke QR-code.');
  })}catch(error){feedback('error','Camera niet beschikbaar',cameraError(error))}finally{$('#start').disabled=false}
 };
 $('#stop').onclick=()=>cameraAction(stopCameras).catch(error=>feedback('error','Camera kon niet stoppen',cameraError(error)));

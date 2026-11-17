@@ -259,6 +259,11 @@ spelhistoriek staan. Een vrijgekomen QR-code kan opnieuw worden gekoppeld.
 
 ## Spelen en punten verdelen
 
+Op een gsm staat de scanner direct onder een compacte vraag- en puntenbalk.
+**Volgende vraag** blijft onderaan binnen duimbereik, boven de navigatie.
+De camera blijft aan bij de volgende vraag. Open **Vraag corrigeren of spel
+stoppen** onder de winnaarslijst voor eerdere vragen en het beëindigen van het spel.
+
 1. Open **Spelen** en start een spel met het aantal punten per vraag.
 2. Scan iedere winnaar van de huidige vraag. Iedere geldige scan krijgt
    aanvankelijk de volledige pot; de app herberekent de gelijke aandelen
