@@ -129,8 +129,9 @@ docker compose up -d --no-build
 De image `ghcr.io/tomvlf/scanscore:latest` wordt na iedere push naar `main`
 gepubliceerd voor `linux/amd64` en `linux/arm64`, net als bij Athlima.
 De eerste build moet voltooid zijn voordat je de image kunt ophalen.
-Er zijn ook vaste tags `sha-<volledige-commit-SHA>` en versietags zoals `1.0.0`.
-Stel desgewenst `SCANSCORE_IMAGE_TAG` in `.env` in om een specifieke build te gebruiken.
+Elke containerworkflow-run krijgt ook een oplopend versienummer `1.0.<runnummer>`
+en een vaste tag `sha-<volledige-commit-SHA>`. Stel `SCANSCORE_IMAGE_TAG` in
+`.env` in op dat versienummer als Dockhand een versie-tag volgt; de standaard is `latest`.
 Een release-tag vervangt `latest` niet.
 
 Maak het containerpakket na de eerste publicatie publiek via de pakketinstellingen
@@ -417,8 +418,9 @@ test/            statische en integratietests
 ```
 
 Elke push naar `main` publiceert `ghcr.io/tomvlf/scanscore:latest` en een
-`sha-<volledige-commit-SHA>`-tag via GitHub Actions. Een release-tag zoals `v1.0.0`
-publiceert daarnaast de versietags `1.0.0` en `1.0` in GitHub Container Registry.
+`sha-<volledige-commit-SHA>`-tag plus een oplopende versie-tag `1.0.<runnummer>`
+via GitHub Actions. Een release-tag zoals `v1.0.0` publiceert daarnaast de
+semantische versietags `1.0.0` en `1.0` in GitHub Container Registry.
 
 ---
 
