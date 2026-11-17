@@ -202,6 +202,22 @@ Open je publieke ScoreScan-adres en doorloop deze controle:
 
 # ScoreScan gebruiken
 
+## Installeren als Android-app
+
+Open het publieke **HTTPS-adres** in Chrome op Android. Kies in het Chrome-menu
+**Toevoegen aan startscherm → Installeren** (of **App installeren**, afhankelijk
+van de Chrome-versie). ScoreScan opent daarna als zelfstandige app zonder
+browseradresbalk en krijgt een eigen app-icoon.
+
+Verwijder een eerder gemaakte snelkoppeling en vernieuw de website als Chrome
+nog de oude versie toont. Installatie als Android-WebAPK vereist Chrome met
+Google Mobile Services; zonder die ondersteuning kan Chrome alleen een
+snelkoppeling aanbieden. Een lokaal HTTP-IP-adres is niet installeerbaar.
+
+De geïnstalleerde app blijft een internetverbinding nodig hebben voor aanmelden,
+QR-koppelingen en live scores. Er worden geen offline scores of oude
+appbestanden gecachet; nieuwe versies worden bij het openen opgehaald.
+
 ## Een spelruimte maken
 
 Vul in het startscherm in:
