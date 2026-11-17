@@ -2,7 +2,7 @@
 
 Geen eindige testsuite kan letterlijk iedere mogelijke invoer, browser, netwerkstoring of aanvaller simuleren. Deze repository gebruikt daarom meerdere testlagen en houdt de functionele dekking expliciet bij in `test/feature-matrix.json`.
 
-## Automatisch bij iedere push en pull request
+## Bij iedere push en pull request
 
 ### Statische en contracttests
 
@@ -22,6 +22,8 @@ Geen eindige testsuite kan letterlijk iedere mogelijke invoer, browser, netwerks
 
 ### Functionele end-to-endtest
 
+Voer deze extra integratietest lokaal uit met Docker/PostgreSQL:
+
 `npm run test:e2e` start de echte app en database en controleert:
 
 - readiness;
@@ -33,18 +35,22 @@ Geen eindige testsuite kan letterlijk iedere mogelijke invoer, browser, netwerks
 - ongeldige deelnemer weigeren;
 - dubbele QR-koppeling weigeren;
 - onbekende QR-code weigeren;
-- vaste punten toekennen;
-- dubbele scan blokkeren;
-- score ongedaan maken;
-- volgende vraag;
-- plaatsverdeling 5–3;
-- geen extra plaats toelaten;
-- nieuwe ronde activeren;
-- idempotente scanrequest niet dubbel verwerken;
+- precies één actief spel per ruimte;
+- deelnemers tijdens een spel toevoegen en na verwijderen QR opnieuw koppelen;
+- gelijke, live herverdeelde puntenpot, inclusief breukdelen;
+- dubbele winnaarscan blokkeren;
+- winnaar uit huidige of eerdere vraag verwijderen;
+- eerdere vraag corrigeren en volgende vraag hervatten;
+- verouderde vraag-scan weigeren;
+- spel stoppen en nieuw spel met nulscores starten;
+- historie en scores van verwijderde spelers behouden;
+- totalen of punten per vraag tonen;
 - display aanmelden en actuele staat ontvangen;
 - displaymutatie weigeren.
 
 ### Databaseprivilegetest
+
+Voer ook deze test lokaal uit met Docker/PostgreSQL:
 
 `npm run test:privileges` controleert met de echte runtimegebruiker dat normale DML werkt en dat onder meer `CREATE`, `ALTER`, `DROP`, `TRUNCATE`, schema-migraties en beheerdersrollen niet beschikbaar zijn.
 

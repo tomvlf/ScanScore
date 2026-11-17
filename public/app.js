@@ -1,9 +1,71 @@
-'use strict';const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];let ws,state,roomId,scanner,pairScanner,lastScan='',lastAt=0,cameraTask=Promise.resolve();
-function send(x){if(ws?.readyState===1)ws.send(JSON.stringify(x))}function wsUrl(){return `${location.protocol==='https:'?'wss':'ws'}://${location.host}/ws`}function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}function total(p){return Object.values(p.scores||{}).reduce((a,b)=>a+Number(b),0)}function toast(t){const e=$('#toast');e.textContent=t;e.classList.add('show');clearTimeout(toast.t);toast.t=setTimeout(()=>e.classList.remove('show'),2200)}function status(t,on=false){$('#status').textContent=t;$('#status').classList.toggle('online',on)}function feedback(kind,title,text){const e=$('#feedback');e.className=`feedback ${kind}`;e.innerHTML=`<b>${kind==='success'?'✓':kind==='error'?'!':'◎'}</b><div><strong>${esc(title)}</strong><p>${esc(text)}</p></div>`}function confetti(){if(matchMedia('(prefers-reduced-motion:reduce)').matches)return;const box=$('#confetti'),colors=['#6657e8','#0e9f6e','#f5b82e','#e84d75'];for(let i=0;i<18;i++){const s=document.createElement('i');s.className='spark';s.style.left=`${45+Math.random()*10}%`;s.style.top='45%';s.style.background=colors[i%4];s.style.setProperty('--x',`${(Math.random()-.5)*340}px`);s.style.setProperty('--y',`${80+Math.random()*260}px`);box.append(s);setTimeout(()=>s.remove(),900)}}
+'use strict';const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];let ws,state,roomId,scanner,pairScanner,lastScan='',lastAt=0,lastQuestionId,cameraTask=Promise.resolve();
+function send(x){if(ws?.readyState!==1){toast('Verbinding verbroken. Meld je opnieuw aan.');return false}ws.send(JSON.stringify(x));return true}function wsUrl(){return `${location.protocol==='https:'?'wss':'ws'}://${location.host}/ws`}function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}function toast(t){const e=$('#toast');e.textContent=t;e.classList.add('show');clearTimeout(toast.t);toast.t=setTimeout(()=>e.classList.remove('show'),2200)}function status(t,on=false){$('#status').textContent=t;$('#status').classList.toggle('online',on)}function feedback(kind,title,text){const e=$('#feedback');e.className=`feedback ${kind}`;e.innerHTML=`<b>${kind==='success'?'✓':kind==='error'?'!':'◎'}</b><div><strong>${esc(title)}</strong><p>${esc(text)}</p></div>`}function confetti(){if(matchMedia('(prefers-reduced-motion:reduce)').matches)return;const box=$('#confetti'),colors=['#6657e8','#0e9f6e','#f5b82e','#e84d75'];for(let i=0;i<18;i++){const s=document.createElement('i');s.className='spark';s.style.left=`${45+Math.random()*10}%`;s.style.top='45%';s.style.background=colors[i%4];s.style.setProperty('--x',`${(Math.random()-.5)*340}px`);s.style.setProperty('--y',`${80+Math.random()*260}px`);box.append(s);setTimeout(()=>s.remove(),900)}}
 function page(name){return cameraAction(async()=>{await stopCameras();$$('.page').forEach(x=>x.classList.toggle('active',x.id===name));$$('[data-page]').forEach(x=>x.classList.toggle('active',x.dataset.page===name));scrollTo({top:0,behavior:'smooth'})}).catch(error=>{const message=cameraError(error);$('#pairStatus').textContent=message;toast(message)})}$$('[data-page]').forEach(x=>x.onclick=()=>page(x.dataset.page));
-function displayUrl(){return `/scoreboard.html?room=${encodeURIComponent(roomId)}`}function render(){if(!state)return;$('#round').innerHTML=state.rounds.map(r=>`<option value="${r.id}">${esc(r.name)}</option>`).join('');$('#round').value=state.activeRoundId;$('#question').value=state.question;$('#mode').value=state.mode;$('#fixed').value=state.fixedPoints;$('#places').value=state.placePoints.join(', ');$('#once').checked=state.oncePerQuestion;const active=state.rounds.find(r=>r.id===state.activeRoundId);$('#playTitle').textContent=`${active?.name||'Ronde'} · Vraag ${state.question}`;$('#fixedField').classList.toggle('hidden',state.mode!=='fixed');$('#placesField').classList.toggle('hidden',state.mode!=='places');$('#winnerCount').textContent=state.winners.length;$('#winners').innerHTML=state.winners.length?state.winners.map((w,i)=>`<li><span class="rank">${i+1}</span><strong>${esc(w.name)}</strong><b>${w.points>=0?'+':''}${w.points}</b></li>`).join(''):'<li class="empty"><strong>Nog geen winnaars</strong><small>De eerste geldige scan verschijnt hier.</small></li>';const sorted=[...state.players].sort((a,b)=>total(b)-total(a)||a.name.localeCompare(b.name,'nl'));$('#scoreList').innerHTML=sorted.map(p=>`<li><span class="score-name">${esc(p.name)}</span><span class="scorepoints">${total(p)}</span></li>`).join('')||'<li class="empty">Nog geen deelnemers</li>';$('#playerCount').textContent=`${state.players.length} ${state.players.length===1?'deelnemer':'deelnemers'}`;$('#playerCards').innerHTML=state.players.map(p=>`<article class="playercard"><div><span class="avatar">${esc(p.name.slice(0,2).toUpperCase())}</span><span><h3>${esc(p.name)}</h3><p>${p.kind==='team'?'Ploeg':'Persoon'} · ${total(p)} punten</p></span></div></article>`).join('');for(const id of ['display','displayTop','displayMore'])$('#'+id).href=displayUrl()}
+function displayUrl(){return `/scoreboard.html?room=${encodeURIComponent(roomId)}`}
+function currentQuestion(){return state?.game?.questions.find(q=>q.ordinal===state.game.question)}
+function canScore(){return !!state?.game&&state.game.id===state.activeGameId}
+function gameAction(type,extra={}){
+ if(!canScore()){toast('Open eerst het actieve spel.');return false}
+ return send({type,gameId:state.game.id,questionId:currentQuestion().id,...extra});
+}
+function render(){
+ if(!state)return;
+ const game=state.game,question=currentQuestion(),winners=question?.winners||[],editable=canScore();
+ if(lastQuestionId!==question?.id){lastQuestionId=question?.id;lastScan='';lastAt=0}
+ $('#gameForm').classList.toggle('hidden',!!state.activeGameId);
+ $('#gameControls').classList.toggle('hidden',!game);
+ $('#returnToGame').classList.toggle('hidden',!state.activeGameId||editable);
+ $('#playTitle').textContent=game?`${game.endedAt?'Gestopt spel':'Spel'} · Vraag ${game.question}`:'Nog geen spel';
+ $('#gameStatus').textContent=game?(game.legacy?'Historische scores uit de vorige versie.':game.endedAt?'Dit spel is gestopt. De scores blijven bewaard.':'Scan alle winnaars en ga daarna naar de volgende vraag.'):'Voeg spelers toe en start een spel.';
+ $('#questionSelect').innerHTML=(game?.questions||[]).map(q=>`<option value="${q.id}">${esc(q.label||'Vraag '+q.ordinal)}</option>`).join('');
+ $('#questionSelect').value=question?.id||'';$('#questionSelect').disabled=!editable;
+ $('#previous').disabled=!editable||game.question===1;$('#next').disabled=!editable;$('#stopGame').disabled=!editable;
+ $('#start').disabled=!editable;$('#undo').disabled=!editable||!winners.length;
+ $('#poolInfo').textContent=question?.points?`Puntenpot: ${formatPoints(question.points)} · ${winners.length} winnaar(s) · ${formatPoints(winners.length?question.points/winners.length:0)} per winnaar`:'';
+ $('#winnerCount').textContent=winners.length;
+ $('#winners').innerHTML=winners.length?winners.map((w,i)=>{
+  const player=state.players.find(p=>p.id===w.playerId);
+  return `<li><span class="rank">${i+1}</span><strong>${esc(player.name)}</strong><b>${formatPoints(w.points)}</b>${editable?`<button class="remove-winner" data-remove-winner="${w.playerId}" aria-label="${esc(player.name)} uit deze vraag verwijderen">Verwijder</button>`:''}</li>`;
+ }).join(''):'<li class="empty"><strong>Nog geen winnaars</strong><small>Scan een gekoppelde QR-code tijdens het spel.</small></li>';
+ const players=state.players.filter(p=>!p.deleted);
+ $('#playerCount').textContent=`${players.length} ${players.length===1?'deelnemer':'deelnemers'}`;
+ $('#playerCards').innerHTML=players.map(p=>`<article class="playercard"><div><span class="avatar">${esc(p.name.slice(0,2).toUpperCase())}</span><span><h3>${esc(p.name)}</h3><p>${p.kind==='team'?'Ploeg':'Persoon'} · ${formatPoints(p.score)} punten</p></span></div><button class="link danger" data-remove-player="${p.id}">Speler verwijderen</button></article>`).join('');
+ const selected=$('#gameHistory').value;
+ $('#gameHistory').innerHTML=state.games.map((g,i)=>`<option value="${g.id}">${esc(g.legacy?'Oude scores':`Spel ${state.games.length-i}`)} - ${esc(new Date(g.startedAt).toLocaleString('nl-BE'))}${g.endedAt?' (gestopt)':' (actief)'}</option>`).join('');
+ $('#gameHistory').value=state.games.some(g=>g.id===selected)?selected:game?.id||'';
+ $('#viewGame').disabled=!state.games.length;
+ renderScores(state,$('#scoreView').value,$('#scoreList'),$('#scoreTable'));
+ for(const id of ['display','displayTop','displayMore'])$('#'+id).href=displayUrl();
+ if(scanner&&!editable)cameraAction(stopCameras).catch(error=>feedback('error','Camera kon niet stoppen',cameraError(error)));
+}
 function loginMessage(message){$('#loginMessage').classList.remove('hidden');$('#loginMessage').textContent=message}
-function connect(name=$('#roomName').value.trim(),password=$('#secret').value){status('Verbinden…');ws?.close();const socket=ws=new WebSocket(wsUrl());socket.onopen=()=>socket.send(JSON.stringify({type:'auth',roomName:name,role:'host',secret:password}));socket.onmessage=e=>{const m=JSON.parse(e.data);if(m.type==='auth.ok'){state=m.state;roomId=m.roomId;$('#login').classList.add('hidden');$('#app').classList.remove('hidden');$('#mobileNav').classList.remove('hidden');status('Live',true);render();feedback('ready','Klaar voor de eerste winnaar','Start de camera en scan een persoonlijke QR-code.')}else if(m.type==='state'){state=m.state;render()}else if(m.type==='scan.result'){if(m.ok){feedback('success',m.name,`${m.points>=0?'+':''}${m.points} punten toegekend`);navigator.vibrate?.([55,35,80]);confetti();setTimeout(()=>feedback('ready','Klaar voor de volgende winnaar','Laat de persoonlijke QR-code zien.'),1800)}else{const text={duplicate:'Deze deelnemer kreeg al punten voor deze vraag.',unknown:'Deze QR-code is niet gekoppeld.',no_more_places:'Alle ingestelde plaatsen zijn al toegekend.'}[m.code]||'De score kon niet worden toegekend.';feedback('error','Niet toegekend',text);navigator.vibrate?.(180)}}else if(m.type==='error')toast('Actie geweigerd. Controleer je invoer.')};socket.onclose=e=>{if(ws!==socket)return;status(e.code===4403?'Aanmelding mislukt':'Offline');if(!state)loginMessage(e.code===4403?'Ruimtenaam of wachtwoord is onjuist.':'Verbinding verbroken. Probeer opnieuw aan te melden.')}}
+function connect(name=$('#roomName').value.trim(),password=$('#secret').value){
+ status('Verbinden…');ws?.close();const socket=ws=new WebSocket(wsUrl());
+ socket.onopen=()=>socket.send(JSON.stringify({type:'auth',roomName:name,role:'host',secret:password}));
+ socket.onmessage=e=>{
+  if(ws!==socket)return;
+  const m=JSON.parse(e.data);
+  if(m.type==='auth.ok'){
+   state=m.state;roomId=m.roomId;$('#login').classList.add('hidden');$('#app').classList.remove('hidden');$('#mobileNav').classList.remove('hidden');status('Live',true);render();
+   feedback('ready',canScore()?'Klaar om winnaars te scannen':'Start eerst een spel',canScore()?'Start de camera en scan een persoonlijke QR-code.':'Spelers kun je op elk moment toevoegen.');
+  }else if(m.type==='state'){
+   if(m.state.revision<state.revision)return;
+   state=m.state;render();
+  }else if(m.type==='scan.result'){
+   if(m.ok){feedback('success',m.name,`Nu ${formatPoints(m.points)} punten per winnaar (${m.winnerCount} winnaars). De verdeling wordt live herberekend.`);navigator.vibrate?.([55,35,80]);confetti()}
+   else{feedback('error','Niet toegevoegd',{duplicate:'Deze speler is al winnaar van deze vraag.',unknown:'Deze QR-code is nog niet gekoppeld aan een speler.'}[m.code]||'De scan kon niet verwerkt worden.');navigator.vibrate?.(180)}
+  }else if(m.type==='error'){
+   const message={input:'Controleer je invoer.',duplicate_qr:'Deze QR-code is al gekoppeld aan een speler.',game_running:'Er loopt al een spel in deze ruimte.',no_active_game:'Dit spel loopt niet meer. Open het actieve spel of start een nieuw spel.',stale_question:'De vraag is gewijzigd. Controleer de huidige vraag en scan opnieuw.',question_limit:'Het maximum van 10.000 vragen is bereikt.',duplicate_request:'Deze scan is al verwerkt.',nothing:'Er is geen scan om ongedaan te maken.'}[m.reason]||'Actie geweigerd. Vernieuw de pagina en probeer opnieuw.';
+   toast(message);feedback('error','Actie niet uitgevoerd',message);$('#pairStatus').textContent=message;
+  }
+ };
+ socket.onclose=e=>{
+  if(ws!==socket)return;
+  status(e.code===4403?'Aanmelding mislukt':'Offline');
+  if(!state)loginMessage(e.code===4403?'Ruimtenaam of wachtwoord is onjuist.':'Verbinding verbroken. Probeer opnieuw aan te melden.');
+  else{toast('Verbinding verbroken. Vernieuw de pagina om opnieuw aan te melden.');cameraAction(stopCameras).catch(error=>feedback('error','Camera kon niet stoppen',cameraError(error)))}
+ };
+}
 $('#loginForm').onsubmit=e=>{e.preventDefault();connect()};$('#create').onclick=async()=>{
  if(!$('#loginForm').reportValidity())return;
  const name=$('#roomName').value.trim(),password=$('#secret').value;
@@ -23,7 +85,26 @@ $('#loginForm').onsubmit=e=>{e.preventDefault();connect()};$('#create').onclick=
   loginMessage(message);toast(message);
  }finally{$('#create').disabled=false}
 };
-$('#mode').onchange=()=>{$('#fixedField').classList.toggle('hidden',$('#mode').value!=='fixed');$('#placesField').classList.toggle('hidden',$('#mode').value!=='places')};$('#save').onclick=()=>send({type:'context.set',roundId:$('#round').value,question:Number($('#question').value),mode:$('#mode').value,fixedPoints:Number($('#fixed').value),placePoints:$('#places').value.split(',').map(x=>Number(x.trim())).filter(Number.isFinite),oncePerQuestion:$('#once').checked});$('#next').onclick=()=>send({type:'question.next'});$('#undo').onclick=()=>send({type:'award.undo'});$('#addRound').onclick=()=>{const n=$('#roundName').value.trim();if(!n)return toast('Geef de ronde een naam.');send({type:'round.add',name:n});$('#roundName').value=''};
+$('#gameForm').onsubmit=e=>{
+ e.preventDefault();if(!$('#gameForm').reportValidity())return;
+ if(send({type:'game.start',pointsPerQuestion:Number($('#pointsPerQuestion').value)}))$('#pointsPerQuestion').value='';
+};
+$('#stopGame').onclick=()=>{if(confirm('Spel stoppen? De scores blijven bewaard; daarna zijn geen correcties meer mogelijk.'))gameAction('game.stop')};
+$('#next').onclick=()=>gameAction('question.next');
+$('#previous').onclick=()=>{
+ const previous=state.game.questions.find(q=>q.ordinal===state.game.question-1);
+ if(previous)gameAction('question.select',{targetQuestionId:previous.id});
+};
+$('#questionSelect').onchange=()=>gameAction('question.select',{targetQuestionId:$('#questionSelect').value});
+$('#undo').onclick=()=>gameAction('award.undo');
+$('#winners').onclick=e=>{const button=e.target.closest('[data-remove-winner]');if(button)gameAction('winner.remove',{playerId:button.dataset.removeWinner})};
+$('#playerCards').onclick=e=>{
+ const button=e.target.closest('[data-remove-player]');
+ if(button&&confirm('Speler uit de ruimte verwijderen? Behaalde punten blijven in de spelhistoriek bewaard.'))send({type:'player.remove',playerId:button.dataset.removePlayer});
+};
+$('#scoreView').onchange=()=>renderScores(state,$('#scoreView').value,$('#scoreList'),$('#scoreTable'));
+$('#viewGame').onclick=()=>{send({type:'game.select',gameId:$('#gameHistory').value});page('scores')};
+$('#returnToGame').onclick=()=>send({type:'game.select',gameId:null});
 function cameraAction(action){const task=cameraTask.then(action);cameraTask=task.catch(error=>console.warn('camera_operation_failed',error));return task}
 function cameraError(error){
  const reason=String(error?.name||'')+' '+String(error?.message||error);
@@ -31,6 +112,7 @@ function cameraError(error){
  if(reason.includes('camera_unsupported'))return 'Deze browser ondersteunt geen cameratoegang. Open ScoreScan in Chrome of Safari.';
  if(reason.includes('scanner_unavailable'))return 'De QR-scanner kon niet laden. Vernieuw de pagina en probeer opnieuw.';
  if(reason.includes('connection_closed'))return 'Verbinding verbroken. Meld je opnieuw aan voordat je een speler toevoegt.';
+ if(reason.includes('camera_video_failed'))return 'De camera geeft geen beeld. Sluit andere camera-apps en vernieuw deze pagina.';
  if(/NotAllowed|SecurityError|Permission denied/i.test(reason))return 'Cameratoegang is geblokkeerd. Sta de camera toe in de site-instellingen van je browser.';
  if(/NotReadable|TrackStart|Could not start video source|in use/i.test(reason))return 'De camera is bezet. Sluit andere camera-apps of browsertabbladen en probeer opnieuw.';
  if(/NotFound|DevicesNotFound/i.test(reason))return 'Geen camera gevonden op dit apparaat.';
@@ -41,23 +123,42 @@ function cameraPreflight(){
  if(!navigator.mediaDevices?.getUserMedia)throw Error('camera_unsupported');
  if(typeof Html5Qrcode!=='function')throw Error('scanner_unavailable');
 }
+function cameraReady(instance,id){
+ if(instance.isScanning)return Promise.resolve();
+ const video=$('#'+id+' video');
+ if(!video)throw Error('camera_video_failed');
+ return new Promise((resolve,reject)=>{
+  const finish=error=>{
+   clearTimeout(timer);video.removeEventListener('playing',playing);video.removeEventListener('error',failed);
+   if(error){for(const track of video.srcObject?.getTracks()||[])track.stop();reject(error)}else resolve();
+  };
+  const playing=()=>finish(instance.isScanning?null:Error('camera_video_failed')),failed=()=>finish(Error('camera_video_failed'));
+  const timer=setTimeout(failed,10000);
+  video.addEventListener('playing',playing,{once:true});video.addEventListener('error',failed,{once:true});
+ });
+}
+async function stopScanner(instance){
+ const current=instance.getState();
+ if(current===Html5QrcodeScannerState.SCANNING||current===Html5QrcodeScannerState.PAUSED)await instance.stop();
+ instance.clear();
+}
 async function stopCameras(){
  if(scanner){
-  if(scanner.isScanning)await scanner.stop();
-  scanner.clear();scanner=null;
+  await stopScanner(scanner);scanner=null;
   $('#stop').classList.add('hidden');$('#start').classList.remove('hidden');
   feedback('ready','Scanner gestopt','Start de camera wanneer de volgende winnaar klaarstaat.');
  }
  if(pairScanner){
-  if(pairScanner.isScanning)await pairScanner.stop();
-  pairScanner.clear();pairScanner=null;$('#pairStatus').textContent='Camera gestopt.';
+  await stopScanner(pairScanner);pairScanner=null;$('#pairStatus').textContent='Camera gestopt.';
  }
 }
 $('#start').onclick=async()=>{
+ if(!canScore()){toast('Start eerst een spel om winnaars te scannen.');return}
  $('#start').disabled=true;
  try{await cameraAction(async()=>{
   await stopCameras();cameraPreflight();scanner=new Html5Qrcode('reader');
-  await scanner.start({facingMode:'environment'},{fps:15,qrbox:{width:240,height:240}},code=>{const now=Date.now();if(code===lastScan&&now-lastAt<1200)return;lastScan=code;lastAt=now;send({type:'scan.award',code,idempotencyKey:crypto.randomUUID()})},()=>{});
+  await scanner.start({facingMode:'environment'},{fps:15,qrbox:{width:240,height:240}},code=>{const now=Date.now();if(code===lastScan&&now-lastAt<1200)return;lastScan=code;lastAt=now;gameAction('scan.award',{code,idempotencyKey:crypto.randomUUID()})},()=>{});
+  await cameraReady(scanner,'reader');
   $('#start').classList.add('hidden');$('#stop').classList.remove('hidden');feedback('ready','Scanner actief','Laat de winnaar zijn QR-code in beeld houden.');
  })}catch(error){feedback('error','Camera niet beschikbaar',cameraError(error))}finally{$('#start').disabled=false}
 };
@@ -75,6 +176,7 @@ $('#pair').onclick=async()=>{
     $('#pairStatus').textContent='QR-code gescand en verzonden.';toast('QR-code verzonden. Controleer de deelnemerslijst.');
    }).catch(error=>{$('#pairStatus').textContent=cameraError(error)});
   },()=>{});
+  await cameraReady(pairScanner,'pairReader');
   $('#pairStatus').textContent='Camera actief. Houd de QR-code voor de camera.';
  })}catch(error){const message=cameraError(error);$('#pairStatus').textContent=message;toast(message)}finally{$('#pair').disabled=false}
 };

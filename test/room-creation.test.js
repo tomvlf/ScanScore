@@ -19,9 +19,12 @@ function browser(fetch){
   send(message){this.messages.push(JSON.parse(message))}
   close(){}
  }
- vm.runInNewContext(app,{document,fetch,WebSocket,location:{protocol:'https:',host:'quiz.example.test'},setTimeout(){},clearTimeout(){}});
+ const context=vm.createContext({document,fetch,WebSocket,location:{protocol:'https:',host:'quiz.example.test'},confirm(){return true},setTimeout(){},clearTimeout(){}});
+ vm.runInContext(fs.readFileSync('public/scores.js','utf8'),context);
+ vm.runInContext(app,context);
  const $=selector=>document.querySelector(selector);
  $('#roomName').value='Family Quiz';$('#secret').value='a long host password';
+ $('#scoreView').value='total';
  return {$,sockets};
 }
 
@@ -52,7 +55,7 @@ test('creating a room automatically signs in with the chosen name and password',
  assert.equal($('#displayToken').value,'test-display-token');
  assert.equal($('#displayCredentials').classList.contains('hidden'),false);
  assert.ok(!$('#loginMessage').textContent.includes('test-display-token'));
- socket.onmessage({data:JSON.stringify({type:'auth.ok',roomId:'internal-room-id',state:{rounds:[],players:[],winners:[],placePoints:[5,3,1]}})});
+ socket.onmessage({data:JSON.stringify({type:'auth.ok',roomId:'internal-room-id',state:{games:[],game:null,activeGameId:null,players:[],revision:1}})});
  assert.equal($('#login').classList.contains('hidden'),true);
  assert.equal($('#app').classList.contains('hidden'),false);
  assert.equal($('#displayMore').href,'/scoreboard.html?room=internal-room-id');
@@ -82,4 +85,48 @@ test('invalid creation fields do not submit or sign in',async()=>{
  $('#loginForm').reportValidity=()=>false;
  await $('#create').onclick();
  assert.equal(sockets.length,0);
+});
+
+test('a new game requires an explicit point pool and sends it to the server',()=>{
+ const {$,sockets}=browser(()=>assert.fail('Starting a game must not create another room'));
+ $('#loginForm').onsubmit({preventDefault(){}});
+ $('#pointsPerQuestion').value='50';
+ $('#gameForm').reportValidity=()=>false;
+ $('#gameForm').onsubmit({preventDefault(){}});
+ assert.equal(sockets[0].messages.length,0);
+ $('#gameForm').reportValidity=()=>true;
+ $('#gameForm').onsubmit({preventDefault(){}});
+ assert.deepEqual(sockets[0].messages,[{type:'game.start',pointsPerQuestion:50}]);
+ assert.equal($('#pointsPerQuestion').value,'');
+});
+
+test('question navigation and winner corrections carry the displayed game and question',()=>{
+ const {$,sockets}=browser(()=>assert.fail('Unexpected fetch'));
+ $('#loginForm').onsubmit({preventDefault(){}});
+ const socket=sockets[0];
+ socket.onmessage({data:JSON.stringify({type:'auth.ok',roomId:'room',state:{
+  games:[],activeGameId:'game',game:{id:'game',question:2,questions:[{id:'q1',ordinal:1,winners:[]},{id:'q2',ordinal:2,points:50,winners:[{playerId:'alice',points:50}]}]},
+  players:[{id:'alice',name:'Alice',score:50,scores:{q2:50}}],revision:2
+ }})});
+ $('#previous').onclick();
+ $('#winners').onclick({target:{closest(){return {dataset:{removeWinner:'alice'}}}}});
+ assert.deepEqual(socket.messages,[
+  {type:'question.select',gameId:'game',questionId:'q2',targetQuestionId:'q1'},
+  {type:'winner.remove',gameId:'game',questionId:'q2',playerId:'alice'}
+ ]);
+ assert.match($('#poolInfo').textContent,/50.*1 winnaar.*50/);
+});
+
+test('stopped games are read-only while player registration remains available',async()=>{
+ const {$,sockets}=browser(()=>assert.fail('Unexpected fetch'));
+ $('#loginForm').onsubmit({preventDefault(){}});
+ sockets[0].onmessage({data:JSON.stringify({type:'auth.ok',roomId:'room',state:{
+  games:[],activeGameId:null,game:{id:'old',endedAt:'2026-01-01',question:1,questions:[{id:'q1',ordinal:1,winners:[]}]},players:[],revision:1
+ }})});
+ assert.equal($('#next').disabled,true);
+ assert.equal($('#start').disabled,true);
+ assert.equal($('#gameForm').classList.contains('hidden'),false);
+ await $('#start').onclick();
+ assert.match($('#toast').textContent,/Start eerst een spel/);
+ assert.equal(sockets[0].messages.length,0);
 });
