@@ -8,7 +8,14 @@
 5. Open `/healthz` en controleer de container-healthchecks.
 
 ## PostgreSQL-migratie
-De migraties gebruiken een PostgreSQL advisory lock en worden door de eenmalige `migrate`-service uitgevoerd. Scoretoekenningen zijn append-only events. Undo voegt een `revoke`-event toe. `SELECT ... FOR UPDATE` serialiseert wijzigingen binnen één quizruimte. Een UUID-idempotency key voorkomt dat dezelfde scanrequest tweemaal wordt verwerkt.
+De migraties gebruiken een PostgreSQL advisory lock en worden door de eenmalige `migrate`-service uitgevoerd. Spelstarts, spelers en QR-koppelingen blijven aan hun ruimte gekoppeld. `SELECT ... FOR UPDATE` serialiseert wijzigingen binnen één quizruimte. Een UUID-idempotency key voorkomt dat dezelfde scanrequest tweemaal wordt verwerkt.
+
+## Spellen en punten
+Per ruimte kan één spel tegelijk actief zijn. De spelmeester stelt bij het starten de puntenpot per vraag in; nieuwe spellen beginnen met nul punten. De spelerslijst en persoonlijke QR-koppelingen blijven aan de ruimte verbonden.
+
+Winnaars worden per vraag bijgehouden. Hun aandeel is steeds de puntenpot gedeeld door het aantal winnaars. Een nieuwe scan herverdeelt alle aandelen direct; breukdelen worden intern bewaard en op het scherm afgerond tot twee decimalen. De volgende vraag opent pas wanneer de spelmeester daarvoor kiest. Een eerdere vraag kan tijdens het spel worden geopend, waarna winnaars kunnen worden verwijderd of opnieuw gescand.
+
+Gestopte spellen worden bewaard voor het scorebord en zijn alleen-lezen. Historische score-events uit oudere versies worden bij de database-upgrade als onveranderbare historische spelresultaten bewaard.
 
 ## Back-up en herstel
 Maak een back-up met `./scripts/backup.sh`. Test herstel periodiek in een afzonderlijke database met `pg_restore --clean --if-exists`. Bewaar back-ups versleuteld buiten de host en definieer een passend RPO/RTO.

@@ -2,28 +2,29 @@
 
 **Scan fysieke QR-kaarten, ken automatisch punten toe en toon het klassement live op een tweede scherm.**
 
-ScoreScan is een selfhosted webapp voor quizzen, spellen en activiteiten waarbij deelnemers een persoonlijke QR-code gebruiken. De quizmaster scant de winnaar; de server controleert de actie, kent de juiste punten toe en werkt het publieke scorebord onmiddellijk bij.
+ScoreScan is een selfhosted webapp voor quizzen, spellen en activiteiten waarbij deelnemers een persoonlijke QR-code gebruiken. De spelmeester scant de winnaars van iedere vraag; de server verdeelt de puntenpot gelijk en werkt het publieke scorebord onmiddellijk bij.
 
 ## Wat kun je ermee?
 
 - deelnemers of ploegen aan een fysieke QR-kaart koppelen;
 - winnaars scannen met de camera van een smartphone;
-- iedereen hetzelfde aantal punten geven;
-- punten volgens scanvolgorde uitdelen, bijvoorbeeld **5, 3 en 1**;
-- voorkomen dat iemand tweemaal scoort voor dezelfde vraag;
-- de laatste scoretoekenning ongedaan maken;
-- meerdere rondes en vragen beheren;
+- één spel tegelijk in een ruimte spelen;
+- deelnemers en hun QR-koppelingen tussen spellen behouden;
+- de puntenpot per vraag gelijk verdelen over alle gescande winnaars;
+- eerdere vragen tijdens het spel corrigeren;
+- totalen of punten per vraag bekijken;
+- gestopte spellen als historiek bewaren;
 - het klassement live tonen op een laptop, tv of beamer;
 - alles op je eigen server hosten.
 
 ## Hoe werkt een spel?
 
-1. De quizmaster maakt een beveiligde spelruimte.
-2. Iedere deelnemer wordt eenmaal aan een QR-kaart gekoppeld.
-3. De quizmaster kiest de ronde, vraag en puntverdeling.
-4. Winnaars tonen hun QR-kaart en worden in volgorde gescand.
-5. ScoreScan verwerkt de punten en synchroniseert het scorebord.
-6. Na de vraag kiest de quizmaster **Volgende vraag**.
+1. De spelmeester maakt een beveiligde ruimte en is meteen aangemeld.
+2. Deelnemers worden met hun naam en persoonlijke QR-code aan de ruimte gekoppeld.
+3. Voor het spel wordt de puntenpot per vraag ingesteld.
+4. Iedere winnaar wordt gescand; de pot wordt live gelijk onder de winnaars verdeeld.
+5. De spelmeester kiest **Volgende vraag** zodra alle winnaars van die vraag gescand zijn.
+6. Eerdere vragen zijn tijdens het spel opnieuw te openen om winnaars te corrigeren.
 
 ## Opbouw
 
@@ -186,15 +187,15 @@ Publiceer poort `8088` niet rechtstreeks op internet. Gebruik de toepassing in p
 
 Open je publieke ScoreScan-adres en doorloop deze controle:
 
-1. Maak een tijdelijke quizruimte.
+1. Maak een tijdelijke spelruimte.
 2. Bewaar het eenmalig getoonde displaytoken.
-3. Meld je aan als quizmaster.
-4. Registreer twee testdeelnemers.
-5. Scan een winnaar met vaste punten.
-6. Controleer de blokkering van een dubbele scan.
-7. Test **Laatste scan ongedaan maken**.
-8. Open het publiek scorebord met het displaytoken.
-9. Test daarna de verdeling `5, 3, 1`.
+3. Meld je aan als spelmeester.
+4. Registreer drie testdeelnemers en start een spel met een puntenpot van 50.
+5. Scan twee winnaars en controleer dat zij elk 25 punten krijgen.
+6. Scan een derde winnaar en controleer dat de punten herverdelen naar circa 16,67 per speler.
+7. Open vraag 1 opnieuw, verwijder een winnaar en controleer de herverdeling.
+8. Open het publieke scorebord en wissel tussen totalen en punten per vraag.
+9. Stop het spel en start een nieuw spel; de spelers blijven, de nieuwe scores beginnen op nul.
 
 ---
 
@@ -223,37 +224,35 @@ Het gegenereerde **displaytoken** vind je direct na het maken onder
 tot het publieke scorebord en kan niet worden gebruikt om als quizmaster aan
 te melden. Een gegenereerd ruimte-ID is evenmin een hostaanmeldnaam.
 
-## Deelnemers registreren
+## Deelnemers registreren en beheren
 
 1. Open **Deelnemers**.
-2. Vul de naam in.
-3. Kies **Persoon** of **Ploeg**.
-4. Kies **Camera openen en QR koppelen**.
+2. Vul de naam in en kies **Persoon** of **Ploeg**.
+3. Kies **Camera openen en QR koppelen** en scan de persoonlijke QR-code.
 
 Bij het wisselen van scherm stopt de actieve scanner, zodat de puntenscanner
 en de spelersscanner de camera niet tegelijk vasthouden. Start de gewenste
 scanner opnieuw op het nieuwe scherm. Cameraproblemen blijven bij de
 spelersscanner zichtbaar; controleer bij een blokkering de cameratoestemming
 in de site-instellingen van je browser en gebruik het HTTPS-adres van de app.
-5. Scan de fysieke QR-kaart.
+Een deelnemer kan vóór, tijdens of na een spel worden toegevoegd. Verwijderen
+haalt de deelnemer uit de ruimte; reeds behaalde scores blijven in de
+spelhistoriek staan. Een vrijgekomen QR-code kan opnieuw worden gekoppeld.
 
-De kaart is daarna aan die deelnemer gekoppeld.
+## Spelen en punten verdelen
 
-## Punten instellen
-
-### Iedere winnaar gelijk
-
-Kies **Iedere winnaar gelijk** en vul één puntenwaarde in, bijvoorbeeld `1` of `10`.
-
-### Volgens scanvolgorde
-
-Kies **Volgorde van scannen** en vul een lijst in:
-
-```text
-5, 3, 1
-```
-
-De eerste geldige scan krijgt 5 punten, de tweede 3 en de derde 1.
+1. Open **Spelen** en start een spel met het aantal punten per vraag.
+2. Scan iedere winnaar van de huidige vraag. Iedere geldige scan krijgt
+   aanvankelijk de volledige pot; de app herberekent de gelijke aandelen
+   onmiddellijk zodra er meer winnaars bijkomen.
+3. Voorbeeld: bij 50 punten krijgen twee winnaars 25 punten elk. Bij drie
+   winnaars is dat 16,67 per winnaar. Breukdelen blijven intern behouden; de
+   weergave rondt af op twee decimalen.
+4. Kies **Volgende vraag** wanneer alle winnaars gescand zijn.
+5. Kies een eerdere vraag in de vraagkiezer om een winnaar te verwijderen of
+   opnieuw te scannen. De verdeling en totaalscores worden direct bijgewerkt.
+6. Stop het spel wanneer het afgelopen is. Een nieuw spel begint met nul
+   punten; spelers, QR-koppelingen en eerdere spelresultaten blijven bewaard.
 
 ## Publiek scorebord openen
 
@@ -263,7 +262,9 @@ Open op het andere apparaat:
 https://quiz.jouwdomein.be/scoreboard.html
 ```
 
-Vul de ruimte-ID en het displaytoken in. Het scorebord kan geen deelnemers, rondes of scores wijzigen.
+Vul de ruimte-ID en het displaytoken in. Het scorebord kan geen deelnemers of
+scores wijzigen. Kies **Totaalpunten** of **Punten per vraag** en selecteer
+desgewenst een eerder spel.
 
 ---
 
