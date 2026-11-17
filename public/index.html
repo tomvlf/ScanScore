@@ -1,9 +1,9 @@
 <!doctype html>
 <html lang="nl">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#6657e8"><title>ScoreScan</title><link rel="stylesheet" href="/app.css"><script defer src="/vendor/html5-qrcode.min.js"></script><script defer src="/scores.js"></script><script defer src="/app.js"></script></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#6657e8"><title>ScoreScan</title><link rel="stylesheet" href="/app.css"><script defer src="/vendor/html5-qrcode.min.js"></script><script defer src="/scores.js"></script><script defer src="/session.js"></script><script defer src="/app.js"></script></head>
 <body>
 <a class="skip" href="#main">Naar inhoud</a>
-<header><a class="brand" href="/"><b>S</b><span><strong>ScoreScan</strong><small>Live spelstudio</small></span></a><span id="status" class="status">Offline</span></header>
+<header><a class="brand" href="/"><b>S</b><span><strong>ScoreScan</strong><small>Live spelstudio</small></span></a><div class="row"><span id="status" class="status">Offline</span><button id="logout" class="hidden">Afmelden</button></div></header>
 <main id="main">
  <section id="login" class="login">
   <div class="intro"><span class="eyebrow">Fysiek spelen, digitaal scoren</span><h1>Scan de winnaars. Verdeel de punten.</h1><p>Iedere winnaar krijgt een gelijk deel van de puntenpot. De scores verschijnen live.</p><div class="chips"><span>Persoonlijke QR-kaarten</span><span>Eenvoudig corrigeren</span><span>Live scorebord</span></div></div>
@@ -35,7 +35,7 @@
    </section>
    <section id="more" class="page">
     <div class="pagehead"><div><span class="eyebrow">Spelbeheer</span><h1>Meer</h1><p class="muted">Eerdere spellen en het publieke scorebord.</p></div></div>
-    <div class="twocards"><section class="card"><h2>Spelhistoriek</h2><p class="muted">Gestopte spellen blijven alleen-lezen beschikbaar. Correcties doe je tijdens het spel door een eerdere vraag te kiezen.</p><label>Spel<select id="gameHistory"></select></label><button id="viewGame">Gekozen spel bekijken</button></section><section class="card"><h2>Publiek scorebord</h2><p class="muted">Voor tv, laptop of beamer met het read-only displaytoken. Aanmelden als spelmeester doe je uitsluitend met je ruimtenaam en wachtwoord.</p><div id="displayCredentials" class="hidden"><label>Displaytoken<input id="displayToken" readonly></label><p class="muted">Bewaar dit token nu veilig: het wordt alleen na het maken getoond en is uitsluitend voor het publieke scorebord.</p></div><a id="displayMore" class="button" target="_blank" rel="noopener">Scorescherm openen</a></section></div>
+    <div class="twocards"><section class="card"><h2>Spelhistoriek</h2><p class="muted">Gestopte spellen blijven alleen-lezen beschikbaar. Correcties doe je tijdens het spel door een eerdere vraag te kiezen.</p><label>Spel<select id="gameHistory"></select></label><button id="viewGame">Gekozen spel bekijken</button></section><section class="card"><h2>Publiek scorebord</h2><p class="muted">Voor tv, laptop of beamer. Meld je aan met dezelfde ruimtenaam en hetzelfde wachtwoord. Op dit apparaat ben je al aangemeld; het scorescherm blijft alleen-lezen.</p><a id="displayMore" class="button" target="_blank" rel="noopener">Scorescherm openen</a></section></div>
    </section>
   </div>
  </section>

@@ -189,8 +189,8 @@ Publiceer poort `8088` niet rechtstreeks op internet. Gebruik de toepassing in p
 Open je publieke ScoreScan-adres en doorloop deze controle:
 
 1. Maak een tijdelijke spelruimte.
-2. Bewaar het eenmalig getoonde displaytoken.
-3. Meld je aan als spelmeester.
+2. Bewaar de gekozen ruimtenaam en het wachtwoord.
+3. Controleer dat je automatisch als spelmeester bent aangemeld.
 4. Registreer drie testdeelnemers en start een spel met een puntenpot van 50.
 5. Scan twee winnaars en controleer dat zij elk 25 punten krijgen.
 6. Scan een derde winnaar en controleer dat de punten herverdelen naar circa 16,67 per speler.
@@ -210,7 +210,8 @@ Vul in het startscherm in:
 - een hostwachtwoord van minstens 12 tekens of 8–16 cijfers.
 
 Klik op **Ruimte maken**. Je wordt automatisch aangemeld met de gekozen
-ruimtenaam en het wachtwoord. Om later terug te keren vul je dezelfde naam en
+ruimtenaam en het wachtwoord. Je blijft op dit apparaat 30 dagen aangemeld,
+ook na vernieuwen of het heropenen van de browser. Daarna vul je dezelfde naam en
 hetzelfde wachtwoord in en klik je op **Aanmelden**. Hoofdletters in de
 ruimtenaam maken geen verschil; spaties aan het begin en einde worden genegeerd.
 
@@ -220,10 +221,10 @@ wachtwoord en spelgegevens. Hun quiznaam wordt de aanmeldnaam; bij dubbele
 quiznamen of een conflict met een bestaand ruimte-ID blijft het oude ruimte-ID
 de aanmeldnaam.
 
-Het gegenereerde **displaytoken** vind je direct na het maken onder
-**Meer → Publiek scorebord**. Bewaar dit veilig. Het geeft alleen leestoegang
-tot het publieke scorebord en kan niet worden gebruikt om als quizmaster aan
-te melden. Een gegenereerd ruimte-ID is evenmin een hostaanmeldnaam.
+De aanmelding gebruikt een intrekbare HttpOnly-cookie; het wachtwoord wordt niet
+in browseropslag bewaard. **Afmelden** trekt deze browsersessie voor beide
+schermen in. Gebruik dit op gedeelde apparaten. Privévensters en het wissen van
+cookies kunnen de aanmelding eerder verwijderen.
 
 ## Deelnemers registreren en beheren
 
@@ -263,9 +264,15 @@ Open op het andere apparaat:
 https://quiz.jouwdomein.be/scoreboard.html
 ```
 
-Vul de ruimte-ID en het displaytoken in. Het scorebord kan geen deelnemers of
-scores wijzigen. Kies **Totaalpunten** of **Punten per vraag** en selecteer
-desgewenst een eerder spel.
+Vul dezelfde ruimtenaam en hetzelfde wachtwoord in als op het bedieningsscherm.
+Op hetzelfde apparaat wordt je bestaande aanmelding automatisch hergebruikt.
+Ook dit scherm blijft na vernieuwen of heropenen aangemeld. Het scorebord kan
+geen deelnemers of scores wijzigen. Kies **Totaalpunten** of **Punten per vraag**
+en selecteer desgewenst een eerder spel.
+
+Het gedeelde wachtwoord geeft ook toegang tot de spelbediening: deel het alleen
+met vertrouwde personen. De oude displaytoken-aanmelding blijft voor bestaande
+API-clients beschikbaar, maar is niet meer nodig in de gebruikersinterface.
 
 ---
 

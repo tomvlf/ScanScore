@@ -27,3 +27,68 @@ test('historical results retain removed players and escape names and old questio
  assert.match(table.innerHTML,/&lt;Finale&gt;/);assert.match(table.innerHTML,/&lt;Alice&gt;/);
  assert.match(table.innerHTML,/verwijderd/);assert.ok(!table.innerHTML.includes('<Alice>'));
 });
+
+async function scoreboard({savedSession=null,loginStatus=200}={}){
+ const elements=new Map(),sockets=[],requests=[],location={protocol:'https:',host:'quiz.example.test'};
+ const document={
+  querySelector(selector){
+   if(!elements.has(selector)){
+    const classes=new Set(selector==='#board'||selector==='#logout'?['hidden']:[]);
+    elements.set(selector,{value:'',textContent:'',innerHTML:'',classList:{
+     add(name){classes.add(name)},remove(name){classes.delete(name)},
+     toggle(name,on){if(on)classes.add(name);else classes.delete(name)},contains(name){return classes.has(name)}
+    }});
+   }
+   return elements.get(selector);
+  }
+ };
+ class WebSocket{
+  constructor(){this.readyState=1;this.messages=[];sockets.push(this)}
+  send(message){this.messages.push(JSON.parse(message))}
+  close(){}
+ }
+ const browser=vm.createContext({document,location,WebSocket,fetch:async(url,options)=>{
+  assert.equal(url,'/api/session');requests.push(options);
+  const status=options.method==='GET'?(savedSession?200:401):loginStatus;
+  return {status,ok:status===200,json:async()=>savedSession||{roomName:'Family Quiz'}};
+ }});
+ for(const file of ['scores.js','session.js','scoreboard.js'])vm.runInContext(fs.readFileSync('public/'+file,'utf8'),browser);
+ await new Promise(setImmediate);
+ return {$:selector=>document.querySelector(selector),sockets,requests,location};
+}
+
+test('scoreboard uses room credentials, clears the password and opens a read-only connection',async()=>{
+ const app=await scoreboard(),{$}=app;
+ $('#roomName').value='Family Quiz';$('#secret').value='a long host password';
+ await $('#auth').onsubmit({preventDefault(){}});
+ assert.deepEqual(JSON.parse(app.requests.find(r=>r.method==='POST').body),{roomName:'Family Quiz',secret:'a long host password'});
+ assert.equal($('#secret').value,'');
+ app.sockets[0].onopen();
+ assert.deepEqual(app.sockets[0].messages,[{type:'auth',role:'display'}]);
+ app.sockets[0].onmessage({data:JSON.stringify({type:'auth.ok',state:{title:'Family Quiz',games:[],players:[],game:null,revision:1}})});
+ assert.equal($('#auth').classList.contains('hidden'),true);
+ assert.equal($('#board').classList.contains('hidden'),false);
+ assert.equal($('#logout').classList.contains('hidden'),false);
+});
+
+test('scoreboard restores after reopening without a password and can log out',async()=>{
+ const app=await scoreboard({savedSession:{roomName:'Family Quiz'}});
+ assert.equal(app.sockets.length,1);app.sockets[0].onopen();
+ assert.deepEqual(app.sockets[0].messages,[{type:'auth',role:'display'}]);
+ assert.deepEqual(app.requests.map(r=>r.method),['GET']);
+ await app.$('#logout').onclick();
+ assert.deepEqual(app.requests.map(r=>r.method),['GET','DELETE']);
+ assert.equal(app.location.href,'/');
+});
+
+test('scoreboard shows invalid credentials and returns to login when a session expires',async()=>{
+ const invalid=await scoreboard({loginStatus:401});
+ await invalid.$('#auth').onsubmit({preventDefault(){}});
+ assert.equal(invalid.sockets.length,0);
+ assert.match(invalid.$('#authMessage').textContent,/Ruimtenaam of wachtwoord is onjuist/);
+ const expired=await scoreboard({savedSession:{roomName:'Family Quiz'}});
+ expired.sockets[0].onclose({code:4403});
+ assert.equal(expired.$('#auth').classList.contains('hidden'),false);
+ assert.equal(expired.$('#board').classList.contains('hidden'),true);
+ assert.match(expired.$('#authMessage').textContent,/aanmelding is verlopen/);
+});

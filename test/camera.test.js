@@ -30,6 +30,7 @@ function browser({startGate,failOnce,secure=true,lateScanningFlag=false}={}){
  const context=vm.createContext({
   document:{querySelector:$,querySelectorAll(){return []}},Html5Qrcode,Html5QrcodeScannerState:{NOT_STARTED:1,SCANNING:2,PAUSED:3},
   navigator:{mediaDevices:{getUserMedia(){}}},isSecureContext:secure,
+  roomSession:{restore:async()=>null},
   console:{warn(){}},scrollTo(){},setTimeout(){},clearTimeout(){},
   socket:{readyState:1,send(message){messages.push(JSON.parse(message))}}
  });

@@ -32,10 +32,80 @@ async function state(c,slug,gameId){
   await c.query('COMMIT');return result;
  }catch(e){await c.query('ROLLBACK');throw e}
 }
-const server=http.createServer(async(req,res)=>{const reqId=crypto.randomUUID();try{if(limited(ipBuckets,ip(req),120,60000)){sec(res);res.writeHead(429);return res.end('{"error":"rate_limited"}')}if(req.method==='POST'&&req.url==='/api/rooms'){const b=await read(req),title=txt(b.roomName),secret=b.hostSecret;if(!title||typeof secret!=='string'||!((/^\d{8,16}$/.test(secret))||(secret.length>=12&&secret.length<=128))){sec(res);res.writeHead(400);return res.end('{"error":"invalid_input"}')}const slug=crypto.randomUUID(),token=b64(32),c=await db.connect();try{await c.query('BEGIN');const rr=(await c.query('INSERT INTO rooms(slug,title,login_name,host_secret_hash) VALUES($1,$2,lower($4),$3) RETURNING id',[slug,title,passHash(secret),title])).rows[0];await c.query('INSERT INTO display_tokens(room_id,token_hash) VALUES($1,$2)',[rr.id,hmac(token)]);await audit(c,rr.id,null,'room_created','ok',reqId,req);await c.query('COMMIT');sec(res);res.writeHead(201);return res.end(JSON.stringify({roomId:slug,displayToken:token}))}catch(e){await c.query('ROLLBACK');throw e}finally{c.release()}}
+function sessionCookie(req,token,maxAge){
+ return `scorescan_session=${token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${maxAge}${process.env.NODE_ENV==='production'||req.socket.encrypted?'; Secure':''}`;
+}
+async function savedSession(c,req){
+ const token=/(?:^|;\s*)scorescan_session=([A-Za-z0-9_-]{43})(?:;|$)/.exec(req.headers.cookie||'')?.[1];
+ if(!token)return null;
+ return (await c.query(`SELECT r.*,s.id AS session_id,s.expires_at AS session_expires_at
+  FROM host_sessions s JOIN rooms r ON r.id=s.room_id
+  WHERE s.token_hash=$1 AND s.revoked_at IS NULL AND s.expires_at>now()`,[hmac('browser-session:'+token)])).rows[0]||null;
+}
+async function sessionRequest(req,res){
+ sec(res);
+ if(!['GET','POST','DELETE'].includes(req.method)){res.writeHead(405);res.end('{"error":"method_not_allowed"}');return}
+ if(req.method!=='GET'&&!ORIGINS.includes(req.headers.origin)){res.writeHead(403);res.end('{"error":"origin_denied"}');return}
+ let body,name;
+ if(req.method==='POST'){
+  body=await read(req);name=txt(body.roomName);
+  if(!name||typeof body.secret!=='string'||body.secret.length>128){res.writeHead(400);res.end('{"error":"invalid_input"}');return}
+  if(limited(authBuckets,ip(req)+':'+name.toLowerCase(),8,15*60e3)){res.writeHead(429);res.end('{"error":"rate_limited"}');return}
+ }
+ const c=await db.connect();
+ try{
+  let room;
+  if(req.method==='POST'){
+   room=(await c.query('SELECT * FROM rooms WHERE login_name=lower($1)',[name])).rows[0];
+   if(!room||!passOk(body.secret,room.host_secret_hash)){
+    log('warning','session_login_rejected');res.writeHead(401);res.end('{"error":"denied"}');return;
+   }
+   const token=b64(32);
+   await c.query("INSERT INTO host_sessions(room_id,token_hash,expires_at) VALUES($1,$2,now()+interval '30 days')",[room.id,hmac('browser-session:'+token)]);
+   res.setHeader('Set-Cookie',sessionCookie(req,token,30*24*60*60));
+  }else{
+   room=await savedSession(c,req);
+   if(req.method==='DELETE'){
+    if(room){
+     await c.query('UPDATE host_sessions SET revoked_at=now() WHERE id=$1',[room.session_id]);
+     for(const socket of wss.clients)if(socket.session===room.session_id)socket.close(4401,'logout');
+    }
+    res.setHeader('Set-Cookie',sessionCookie(req,'',0));res.end('{"ok":true}');return;
+   }
+   if(!room){res.writeHead(401);res.end('{"error":"session_expired"}');return}
+  }
+  res.end(JSON.stringify({roomName:room.title}));
+ }finally{c.release()}
+}
+const server=http.createServer(async(req,res)=>{const reqId=crypto.randomUUID();try{if(limited(ipBuckets,ip(req),120,60000)){sec(res);res.writeHead(429);return res.end('{"error":"rate_limited"}')}if(req.url==='/api/session')return await sessionRequest(req,res);if(req.method==='POST'&&req.url==='/api/rooms'){const b=await read(req),title=txt(b.roomName),secret=b.hostSecret;if(!title||typeof secret!=='string'||!((/^\d{8,16}$/.test(secret))||(secret.length>=12&&secret.length<=128))){sec(res);res.writeHead(400);return res.end('{"error":"invalid_input"}')}const slug=crypto.randomUUID(),token=b64(32),c=await db.connect();try{await c.query('BEGIN');const rr=(await c.query('INSERT INTO rooms(slug,title,login_name,host_secret_hash) VALUES($1,$2,lower($4),$3) RETURNING id',[slug,title,passHash(secret),title])).rows[0];await c.query('INSERT INTO display_tokens(room_id,token_hash) VALUES($1,$2)',[rr.id,hmac(token)]);await audit(c,rr.id,null,'room_created','ok',reqId,req);await c.query('COMMIT');sec(res);res.writeHead(201);return res.end(JSON.stringify({roomId:slug,displayToken:token}))}catch(e){await c.query('ROLLBACK');throw e}finally{c.release()}}
 if(req.url==='/healthz'||req.url==='/readyz'){const c=await db.connect();try{await c.query('SELECT 1');sec(res);res.end('{"ok":true}')}finally{c.release()}return}let u=req.url.split('?')[0];if(u==='/')u='/index.html';if(u==='/vendor/html5-qrcode.min.js'){u='/vendor.js';const src=path.join(__dirname,'node_modules/html5-qrcode/html5-qrcode.min.js');sec(res,'text/javascript; charset=utf-8');return fs.createReadStream(src).pipe(res)}const f=path.normalize(path.join(PUBLIC,u));if(!f.startsWith(PUBLIC)){sec(res);res.writeHead(403);return res.end()}const types={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8'};sec(res,types[path.extname(f)]||'application/octet-stream');fs.stat(f,(e,s)=>{if(e||!s.isFile()){res.writeHead(404);res.end()}else fs.createReadStream(f).pipe(res)})}catch(e){log('error','http_error',{reqId,message:e.code||e.message});if(!res.headersSent)sec(res);res.writeHead(e.code==='23505'?409:400);res.end('{"error":"request_failed"}')}});
 const wss=new WebSocketServer({noServer:true,maxPayload:16384,perMessageDeflate:false});server.on('upgrade',(req,sock,head)=>{const client=ip(req);if(!ORIGINS.includes(req.headers.origin)||limited(connections,client,8,60000)||new URL(req.url,'http://x').pathname!=='/ws'){sock.write('HTTP/1.1 403 Forbidden\r\n\r\n');return sock.destroy()}wss.handleUpgrade(req,sock,head,ws=>{ws.clientIp=client;wss.emit('connection',ws,req)})});
-async function auth(ws,m,req){const name=m.role==='host'?txt(m.roomName):null;if(!['host','display'].includes(m.role)||typeof m.secret!=='string'||(m.role==='host'?!name:!validId(m.roomId)))throw Error('auth');if(limited(authBuckets,ws.clientIp+':'+(name||m.roomId).toLowerCase(),8,15*60e3))throw Error('blocked');const c=await db.connect();try{const r=(await c.query(m.role==='host'?'SELECT * FROM rooms WHERE login_name=lower($1)':'SELECT * FROM rooms WHERE slug=$1',[name||m.roomId])).rows[0];let ok=false;if(r&&m.role==='host')ok=passOk(m.secret,r.host_secret_hash);if(r&&m.role==='display')ok=(await c.query('SELECT 1 FROM display_tokens WHERE room_id=$1 AND token_hash=$2 AND revoked_at IS NULL AND(expires_at IS NULL OR expires_at>now())',[r.id,hmac(m.secret)])).rowCount===1;if(!ok)throw Error('denied');const raw=b64(32),hash=hmac(raw),sid=(await c.query("INSERT INTO host_sessions(room_id,token_hash,expires_at) VALUES($1,$2,now()+interval '8 hours') RETURNING id",[r.id,hash])).rows[0].id;ws.room=r;ws.role=m.role;ws.session=sid;ws.req=req;ws.roomSlug=r.slug;ws.authed=true;ws.send(JSON.stringify({type:'auth.ok',roomId:r.slug,sessionToken:raw,state:await state(c,r.slug)}))}finally{c.release()}}
+async function auth(ws,m,req){
+ if(m.type!=='auth'||!['host','display'].includes(m.role))throw Error('auth');
+ const c=await db.connect();
+ try{
+  let room,sid,raw;
+  if(m.secret===undefined){
+   room=await savedSession(c,req);
+   if(!room)throw Error('denied');
+   sid=room.session_id;ws.sessionExpiresAt=new Date(room.session_expires_at).getTime();
+  }else{
+   const name=txt(m.roomName),legacyDisplay=m.role==='display'&&!name&&validId(m.roomId);
+   if(typeof m.secret!=='string'||m.secret.length>128||(!name&&!legacyDisplay))throw Error('auth');
+   if(limited(authBuckets,ws.clientIp+':'+(name||m.roomId).toLowerCase(),8,15*60e3))throw Error('blocked');
+   room=(await c.query(legacyDisplay?'SELECT * FROM rooms WHERE slug=$1':'SELECT * FROM rooms WHERE login_name=lower($1)',[name||m.roomId])).rows[0];
+   const ok=room&&(legacyDisplay?
+    (await c.query('SELECT 1 FROM display_tokens WHERE room_id=$1 AND token_hash=$2 AND revoked_at IS NULL AND(expires_at IS NULL OR expires_at>now())',[room.id,hmac(m.secret)])).rowCount===1:
+    passOk(m.secret,room.host_secret_hash));
+   if(!ok)throw Error('denied');
+   raw=b64(32);
+   sid=(await c.query("INSERT INTO host_sessions(room_id,token_hash,expires_at) VALUES($1,$2,now()+interval '8 hours') RETURNING id",[room.id,hmac(raw)])).rows[0].id;
+   ws.sessionExpiresAt=Date.now()+8*60*60e3;
+  }
+  ws.room=room;ws.role=m.role;ws.session=sid;ws.req=req;ws.roomSlug=room.slug;ws.authed=true;
+  ws.send(JSON.stringify({type:'auth.ok',roomId:room.slug,...(raw?{sessionToken:raw}:{}),state:await state(c,room.slug)}));
+ }finally{c.release()}
+}
 async function act(ws,m){
  if(m.type==='game.select'){
   const c=await db.connect();
@@ -119,7 +189,10 @@ wss.on('connection',(ws,req)=>{
   ws.messageTask=ws.messageTask.then(async()=>{
    if(ws.readyState!==1)return;
    const m=JSON.parse(b.toString());
-   if(!ws.authed){await auth(ws,m,req);clearTimeout(timer)}else await act(ws,m);
+   if(!ws.authed){await auth(ws,m,req);clearTimeout(timer)}else{
+    if(Date.now()>=ws.sessionExpiresAt)throw Error('session_expired');
+    await act(ws,m);
+   }
   }).catch(e=>{log('warning','ws_rejected',{reason:e.message});ws.close(4403,'rejected')});
  });
  ws.on('error',e=>log('warning','ws_error',{reason:e.message}));

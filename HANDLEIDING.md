@@ -20,6 +20,14 @@ Gestopte spellen worden bewaard voor het scorebord en zijn alleen-lezen. Histori
 ## Back-up en herstel
 Maak een back-up met `./scripts/backup.sh`. Test herstel periodiek in een afzonderlijke database met `pg_restore --clean --if-exists`. Bewaar back-ups versleuteld buiten de host en definieer een passend RPO/RTO.
 
+## Aanmelden
+De spelbediening en het scorescherm gebruiken dezelfde ruimtenaam en hetzelfde
+wachtwoord. Een intrekbare HttpOnly-cookie bewaart de aanmelding 30 dagen, ook na
+vernieuwen of heropenen van de browser. In productie is de cookie uitsluitend via
+HTTPS beschikbaar. **Afmelden** trekt de browsersessie voor beide schermen in.
+Het wachtwoord wordt niet in browseropslag bewaard. Het scorescherm blijft
+alleen-lezen, maar wie het wachtwoord kent kan ook de spelbediening openen.
+
 ## Extra hardening
 - Database zit uitsluitend op een intern Docker-netwerk en publiceert geen poort.
 - PostgreSQL gebruikt SCRAM-SHA-256 en time-outs.

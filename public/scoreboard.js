@@ -1,9 +1,8 @@
 'use strict';
-const $=s=>document.querySelector(s),q=new URLSearchParams(location.search);
+const $=s=>document.querySelector(s);
 let ws,state;
-$('#roomId').value=q.get('room')||'';
 function render(s){
- state=s;$('#auth').classList.add('hidden');$('#board').classList.remove('hidden');
+ state=s;$('#auth').classList.add('hidden');$('#board').classList.remove('hidden');$('#logout').classList.remove('hidden');
  $('#title').textContent=s.title;
  $('#gameInfo').textContent=s.game?`${s.game.endedAt?'Gestopt spel':'Actief spel'} - Vraag ${s.game.question}`:'Nog geen spel gestart';
  renderScores(s,$('#scoreView').value,$('#scoreList'),$('#scoreTable'));
@@ -15,18 +14,27 @@ function render(s){
 }
 $('#scoreView').onchange=()=>{if(state)renderScores(state,$('#scoreView').value,$('#scoreList'),$('#scoreTable'))};
 $('#gameHistory').onchange=()=>{if(ws?.readyState===1)ws.send(JSON.stringify({type:'game.select',gameId:$('#gameHistory').value||null}))};
-$('#connect').onclick=()=>{
+async function connect(resume=false){
+ try{
+ if(!resume)await roomSession.login($('#roomName').value.trim(),$('#secret').value);
+ $('#secret').value='';$('#authMessage').textContent='';
  ws?.close();const socket=ws=new WebSocket(`${location.protocol==='https:'?'wss':'ws'}://${location.host}/ws`);
- socket.onopen=()=>socket.send(JSON.stringify({type:'auth',roomId:$('#roomId').value.trim().toLowerCase(),role:'display',secret:$('#token').value}));
+ socket.onopen=()=>socket.send(JSON.stringify({type:'auth',role:'display'}));
  socket.onmessage=e=>{
   if(ws!==socket)return;
   const m=JSON.parse(e.data);
   if((m.type==='auth.ok'||m.type==='state')&&(!state||m.state.revision>=state.revision))render(m.state);
  };
- socket.onclose=()=>{
+ socket.onclose=e=>{
   if(ws!==socket)return;
   $('#status').textContent='Offline';$('#status').classList.remove('online');
-  $('#updated').textContent='Verbinding verbroken. Vernieuw de pagina en meld opnieuw aan.';
-  $('#authMessage').textContent='Geen verbinding. Controleer het ruimte-ID en displaytoken en probeer opnieuw.';
+  $('#updated').textContent='Verbinding verbroken. Vernieuw de pagina om de verbinding te herstellen.';
+  $('#auth').classList.remove('hidden');$('#board').classList.add('hidden');$('#logout').classList.add('hidden');state=null;
+  $('#authMessage').textContent=e.code===4403||e.code===4401?'Je aanmelding is verlopen. Meld je opnieuw aan.':'Geen verbinding. Probeer opnieuw.';
  };
-};
+ }catch(error){$('#authMessage').textContent=error.message}
+}
+$('#auth').onsubmit=e=>{e.preventDefault();return connect()};
+roomSession.restore().then(session=>{
+ if(session){$('#roomName').value=session.roomName;return connect(true)}
+}).catch(error=>{$('#authMessage').textContent='Aanmelding herstellen mislukt. Controleer je verbinding en probeer opnieuw. '+error.message});

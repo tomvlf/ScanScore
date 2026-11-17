@@ -1,7 +1,7 @@
-'use strict';const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];let ws,state,roomId,scanner,pairScanner,lastScan='',lastAt=0,lastQuestionId,cameraTask=Promise.resolve();
+'use strict';const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];let ws,state,scanner,pairScanner,lastScan='',lastAt=0,lastQuestionId,cameraTask=Promise.resolve();
 function send(x){if(ws?.readyState!==1){toast('Verbinding verbroken. Meld je opnieuw aan.');return false}ws.send(JSON.stringify(x));return true}function wsUrl(){return `${location.protocol==='https:'?'wss':'ws'}://${location.host}/ws`}function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}function toast(t){const e=$('#toast');e.textContent=t;e.classList.add('show');clearTimeout(toast.t);toast.t=setTimeout(()=>e.classList.remove('show'),2200)}function status(t,on=false){$('#status').textContent=t;$('#status').classList.toggle('online',on)}function feedback(kind,title,text){const e=$('#feedback');e.className=`feedback ${kind}`;e.innerHTML=`<b>${kind==='success'?'✓':kind==='error'?'!':'◎'}</b><div><strong>${esc(title)}</strong><p>${esc(text)}</p></div>`}function confetti(){if(matchMedia('(prefers-reduced-motion:reduce)').matches)return;const box=$('#confetti'),colors=['#6657e8','#0e9f6e','#f5b82e','#e84d75'];for(let i=0;i<18;i++){const s=document.createElement('i');s.className='spark';s.style.left=`${45+Math.random()*10}%`;s.style.top='45%';s.style.background=colors[i%4];s.style.setProperty('--x',`${(Math.random()-.5)*340}px`);s.style.setProperty('--y',`${80+Math.random()*260}px`);box.append(s);setTimeout(()=>s.remove(),900)}}
 function page(name){return cameraAction(async()=>{await stopCameras();$$('.page').forEach(x=>x.classList.toggle('active',x.id===name));$$('[data-page]').forEach(x=>x.classList.toggle('active',x.dataset.page===name));scrollTo({top:0,behavior:'smooth'})}).catch(error=>{const message=cameraError(error);$('#pairStatus').textContent=message;toast(message)})}$$('[data-page]').forEach(x=>x.onclick=()=>page(x.dataset.page));
-function displayUrl(){return `/scoreboard.html?room=${encodeURIComponent(roomId)}`}
+function displayUrl(){return '/scoreboard.html'}
 function currentQuestion(){return state?.game?.questions.find(q=>q.ordinal===state.game.question)}
 function canScore(){return !!state?.game&&state.game.id===state.activeGameId}
 function gameAction(type,extra={}){
@@ -39,14 +39,17 @@ function render(){
  if(scanner&&!editable)cameraAction(stopCameras).catch(error=>feedback('error','Camera kon niet stoppen',cameraError(error)));
 }
 function loginMessage(message){$('#loginMessage').classList.remove('hidden');$('#loginMessage').textContent=message}
-function connect(name=$('#roomName').value.trim(),password=$('#secret').value){
+async function connect(name=$('#roomName').value.trim(),password=$('#secret').value,resume=false){
+ try{
+ if(!resume)await roomSession.login(name,password);
+ $('#secret').value='';
  status('Verbinden…');ws?.close();const socket=ws=new WebSocket(wsUrl());
- socket.onopen=()=>socket.send(JSON.stringify({type:'auth',roomName:name,role:'host',secret:password}));
+ socket.onopen=()=>socket.send(JSON.stringify({type:'auth',role:'host'}));
  socket.onmessage=e=>{
   if(ws!==socket)return;
   const m=JSON.parse(e.data);
   if(m.type==='auth.ok'){
-   state=m.state;roomId=m.roomId;$('#login').classList.add('hidden');$('#app').classList.remove('hidden');$('#mobileNav').classList.remove('hidden');status('Live',true);render();
+   state=m.state;$('#login').classList.add('hidden');$('#app').classList.remove('hidden');$('#mobileNav').classList.remove('hidden');$('#logout').classList.remove('hidden');status('Live',true);render();
    feedback('ready',canScore()?'Klaar om winnaars te scannen':'Start eerst een spel',canScore()?'Start de camera en scan een persoonlijke QR-code.':'Spelers kun je op elk moment toevoegen.');
   }else if(m.type==='state'){
    if(m.state.revision<state.revision)return;
@@ -62,11 +65,16 @@ function connect(name=$('#roomName').value.trim(),password=$('#secret').value){
  socket.onclose=e=>{
   if(ws!==socket)return;
   status(e.code===4403?'Aanmelding mislukt':'Offline');
-  if(!state)loginMessage(e.code===4403?'Ruimtenaam of wachtwoord is onjuist.':'Verbinding verbroken. Probeer opnieuw aan te melden.');
-  else{toast('Verbinding verbroken. Vernieuw de pagina om opnieuw aan te melden.');cameraAction(stopCameras).catch(error=>feedback('error','Camera kon niet stoppen',cameraError(error)))}
+  if(scanner||pairScanner)cameraAction(stopCameras).catch(error=>feedback('error','Camera kon niet stoppen',cameraError(error)));
+  if(e.code===4403||e.code===4401){
+   state=null;$('#login').classList.remove('hidden');$('#app').classList.add('hidden');$('#mobileNav').classList.add('hidden');$('#logout').classList.add('hidden');
+   loginMessage('Je aanmelding is verlopen. Meld je opnieuw aan.');
+  }else if(!state)loginMessage('Verbinding verbroken. Probeer opnieuw aan te melden.');
+  else toast('Verbinding verbroken. Vernieuw de pagina om de verbinding te herstellen.');
  };
+ }catch(error){status('Niet aangemeld');loginMessage(error.message);toast(error.message)}
 }
-$('#loginForm').onsubmit=e=>{e.preventDefault();connect()};$('#create').onclick=async()=>{
+$('#loginForm').onsubmit=e=>{e.preventDefault();return connect()};$('#create').onclick=async()=>{
  if(!$('#loginForm').reportValidity())return;
  const name=$('#roomName').value.trim(),password=$('#secret').value;
  $('#create').disabled=true;
@@ -78,8 +86,7 @@ $('#loginForm').onsubmit=e=>{e.preventDefault();connect()};$('#create').onclick=
   }
   const d=await r.json();
   if(!r.ok){const message=d.error==='invalid_input'?'Vul een ruimtenaam van maximaal 80 tekens in en een wachtwoord van minstens 12 tekens of 8–16 cijfers.':'Ruimte kon niet worden aangemaakt. Probeer het later opnieuw.';loginMessage(message);toast(message);return}
-  $('#displayToken').value=d.displayToken;$('#displayCredentials').classList.remove('hidden');
-  loginMessage('Ruimte aangemaakt. Je wordt aangemeld.');connect(name,password);
+  loginMessage('Ruimte aangemaakt. Je wordt aangemeld.');await connect(name,password);
  }catch{
   const message='Ruimte kon niet worden aangemaakt. Controleer de velden en je verbinding.';
   loginMessage(message);toast(message);
@@ -180,3 +187,6 @@ $('#pair').onclick=async()=>{
   $('#pairStatus').textContent='Camera actief. Houd de QR-code voor de camera.';
  })}catch(error){const message=cameraError(error);$('#pairStatus').textContent=message;toast(message)}finally{$('#pair').disabled=false}
 };
+roomSession.restore().then(session=>{
+ if(session){$('#roomName').value=session.roomName;return connect(undefined,undefined,true)}
+}).catch(error=>loginMessage('Aanmelding herstellen mislukt. Controleer je verbinding en probeer opnieuw. '+error.message));
