@@ -182,6 +182,12 @@ Laat je reverse proxy HTTPS en WebSocketverbindingen doorsturen naar:
 http://127.0.0.1:8088
 ```
 
+Gebruik precies zoveel `TRUST_PROXY_HOPS` als er vertrouwde proxy's tussen de
+publieke client en de app staan (standaard `1`). De proxy moet de ontvangen
+`X-Forwarded-For`-keten bijwerken met het echte clientadres en dat adres niet in
+een willekeurig clientheader laten vervangen. Bij een rechtstreeks verbinding
+zonder proxy zet je de waarde op `0`.
+
 Publiceer poort `8088` niet rechtstreeks op internet. Gebruik de toepassing in productie uitsluitend via HTTPS/WSS, anders is de camerafunctie op veel mobiele browsers niet beschikbaar.
 
 ## 8. Eerste functionele test
