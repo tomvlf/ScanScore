@@ -51,7 +51,7 @@ services:
       SECRET_PEPPER: ${SECRET_PEPPER:?Set SECRET_PEPPER in .env}
       QR_ENCRYPTION_KEY: ${QR_ENCRYPTION_KEY:?Set QR_ENCRYPTION_KEY in .env}
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:?Set ALLOWED_ORIGINS in .env}
-      TRUST_PROXY: "1"
+      TRUST_PROXY_HOPS: "${TRUST_PROXY_HOPS:-1}"
       DB_POOL_MAX: "10"
     networks: [backend]
     ports: ["127.0.0.1:8088:8080"]

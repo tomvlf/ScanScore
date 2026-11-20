@@ -2,7 +2,7 @@
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm'),{EventEmitter}=require('node:events');
 const source=fs.readFileSync('server.js','utf8');
 
-function application({production=false}={}){
+function application({production=false,trustProxyHops=0}={}){
  const rooms=new Map(),sessions=new Map();let handle;
  const client={
   async query(sql,values=[]){
@@ -44,7 +44,7 @@ function application({production=false}={}){
    return require(name);
   },
   __dirname:process.cwd(),Buffer,
-  process:{env:{DATABASE_URL:'postgresql://test.invalid/test',SECRET_PEPPER:'test-only-pepper',QR_ENCRYPTION_KEY:Buffer.alloc(32).toString('base64'),NODE_ENV:production?'production':'test'},stdout:{write(){}}},
+  process:{env:{DATABASE_URL:'postgresql://test.invalid/test',SECRET_PEPPER:'test-only-pepper',QR_ENCRYPTION_KEY:Buffer.alloc(32).toString('base64'),NODE_ENV:production?'production':'test',TRUST_PROXY_HOPS:String(trustProxyHops)},stdout:{write(){}}},
   setInterval(){return {unref(){}}}
  });
  vm.runInContext(source,context);
@@ -57,6 +57,7 @@ function application({production=false}={}){
    return response;
   },
   create(body){return this.request('POST','/api/rooms',body)},
+  clientIp(headers={},remoteAddress='test-client'){return context.ip({headers,socket:{remoteAddress}})},
   async authenticate(message,cookie){
    const messages=[],socket={clientIp:'test-client',send(data){messages.push(JSON.parse(data))},close(code){this.closed=code}};
    await context.auth(socket,{type:'auth',...message},{socket:{remoteAddress:'test-client'},headers:{cookie}});
@@ -155,4 +156,23 @@ test('session login rejects wrong passwords and cross-origin login or logout',as
   assert.equal((await app.request(method,'/api/session',body,{origin:'https://evil.example'})).statusCode,403);
  }
  assert.equal(app.sessions.size,0);
+});
+
+test('only the configured trusted proxy hops determine the client address',()=>{
+ const app=application({trustProxyHops:1});
+ assert.equal(app.clientIp({'x-forwarded-for':'198.51.100.9, 203.0.113.12'},'127.0.0.1'),'203.0.113.12');
+ assert.equal(app.clientIp({},'127.0.0.1'),'127.0.0.1');
+ assert.equal(application({trustProxyHops:0}).clientIp({'x-forwarded-for':'198.51.100.9'},'127.0.0.1'),'127.0.0.1');
+});
+
+test('room creation is origin-protected and rate-limited per effective client',async()=>{
+ const app=application({trustProxyHops:1}),secret='a long host password';
+ const denied=await app.request('POST','/api/rooms',{roomName:'Blocked',hostSecret:secret},{origin:'https://evil.example'});
+ assert.equal(denied.statusCode,403);
+ for(let i=0;i<5;i++){
+  const response=await app.request('POST','/api/rooms',{roomName:`Allowed ${i}`,hostSecret:secret},{'x-forwarded-for':`198.51.100.${i}, 203.0.113.12`});
+  assert.equal(response.statusCode,201);
+ }
+ const throttled=await app.request('POST','/api/rooms',{roomName:'Throttled',hostSecret:secret},{'x-forwarded-for':'192.0.2.1, 203.0.113.12'});
+ assert.equal(throttled.statusCode,429);
 });

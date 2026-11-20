@@ -37,6 +37,8 @@ alleen-lezen, maar wie het wachtwoord kent kan ook de spelbediening openen.
 - SQL is geparameteriseerd; databaseconstraints beschermen integriteit.
 - Auditlog gebruikt UTC, correlation IDs en gehashte IP-adressen.
 - Strikte Origin-allowlist, CSP, WSS, payload-, login- en berichtlimieten.
+- Begrensde, ge-serialiseerde scryptbewerkingen en aparte quotas voor het aanmaken van ruimten.
+- Alleen het vast aantal vertrouwde proxyhops bepaalt het clientadres voor rate limiting en auditlogs.
 - Containers draaien read-only, zonder extra privileges en met resourcegrenzen.
 
 ## Productiechecklist
