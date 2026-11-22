@@ -3,8 +3,8 @@
   "participants": ["add before/during/after game", "add person", "add team", "reject duplicate QR", "reject malformed participant", "remove player without deleting history", "reuse released QR"],
   "scoring": ["equal live shares", "fractional shares", "unknown QR", "duplicate scan prevention", "idempotency", "undo current question", "remove winner and redistribute", "next question", "correct previous question", "reject stale question scans"],
   "games": ["explicit point pool", "one active game", "stop game", "new game resets scores", "persistent room roster", "read-only previous games", "legacy score preservation"],
-  "display": ["display login", "live score state", "total or per-question view", "game history selection", "display cannot mutate"],
+  "display": ["display login", "live score state", "total or per-question view", "game history selection", "display cannot mutate", "podium for top three", "current question highlight"],
   "security": ["origin allowlist", "authentication timeout", "message size limit", "rate-limit hooks", "security headers", "parameterized SQL", "runtime database least privilege"],
   "operations": ["health endpoint", "readiness endpoint", "migration tracking", "secret-file loading", "backup script", "compose secret separation"],
-  "ui": ["login form", "play navigation", "participant registration", "scoreboard navigation", "settings navigation", "scanner feedback", "responsive navigation", "public scoreboard"]
+  "ui": ["login form", "play navigation", "participant registration", "scoreboard navigation", "settings navigation", "scanner feedback", "responsive navigation", "public scoreboard", "score podium", "confirmation dialog", "score meters", "public fullscreen control"]
 }

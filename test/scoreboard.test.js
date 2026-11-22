@@ -27,6 +27,22 @@ test('historical results retain removed players and escape names and old questio
  assert.match(table.innerHTML,/&lt;Finale&gt;/);assert.match(table.innerHTML,/&lt;Alice&gt;/);
  assert.match(table.innerHTML,/verwijderd/);assert.ok(!table.innerHTML.includes('<Alice>'));
 });
+test('podium shows the top three, highlights the leader and escapes names',()=>{
+ const box={innerHTML:'',classList:{one:true,few:true,toggle(name,on){this[name]=on}}};
+ context.renderPodium({players:[
+  {name:'<b>Alice</b>',score:100},
+  {name:'Bravo',score:50},
+  {name:'Charlie',score:25},
+  {name:'Delta',score:10}
+ ]},box);
+ assert.equal((box.innerHTML.match(/podium-card place-/g)||[]).length,3);
+ assert.match(box.innerHTML,/place-1/);
+ assert.match(box.innerHTML,/100/);
+ assert.ok(!box.innerHTML.includes('<b>Alice</b>'));
+ assert.ok(!box.innerHTML.includes('Delta'));
+ assert.equal(box.classList.one,false);
+ assert.equal(box.classList.few,false);
+});
 
 async function scoreboard({savedSession=null,loginStatus=200}={}){
  const elements=new Map(),sockets=[],requests=[],location={protocol:'https:',host:'quiz.example.test'};

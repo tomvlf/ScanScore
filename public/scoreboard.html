@@ -1,6 +1,98 @@
 <!doctype html>
-<html lang="nl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#6657e8"><title>ScoreScan Live</title><link rel="manifest" href="/manifest.webmanifest"><link rel="icon" type="image/png" href="/icons/icon-192.png"><link rel="stylesheet" href="/app.css"><script defer src="/scores.js"></script><script defer src="/session.js"></script><script defer src="/scoreboard.js"></script></head>
-<body class="displaybody"><header><a class="brand"><b>S</b><span><strong>ScoreScan</strong><small>Live klassement</small></span></a><div class="row"><span id="status" class="status">Offline</span><button id="logout" class="hidden">Afmelden</button></div></header>
-<main><form id="auth" class="card displayauth"><span class="eyebrow">Publiek scherm</span><h1>Verbind met het spel</h1><label>Ruimtenaam<input id="roomName" maxlength="80" required autocomplete="username"></label><label>Wachtwoord<input id="secret" type="password" maxlength="128" required autocomplete="current-password"></label><button id="connect" class="primary" type="submit">Scorebord openen</button><p id="authMessage" role="status"></p></form>
-<section id="board" class="board hidden"><div><span class="eyebrow">Live klassement</span><h1 id="title"></h1><p id="gameInfo" class="muted"></p></div><div class="board-controls"><label>Spel<select id="gameHistory"><option value="">Actief / meest recente spel volgen</option></select></label><label>Weergave<select id="scoreView"><option value="total">Totaalpunten</option><option value="questions">Punten per vraag</option></select></label></div><ol id="scoreList" class="scorelist big"></ol><div id="scoreTable" class="scoretable hidden"></div><p class="muted">Breukdelen worden pas voor weergave afgerond op twee decimalen.</p><p id="updated" class="muted" role="status"></p></section></main>
-</body></html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#080910">
+<meta name="description" content="Live scorebord van ScoreScan.">
+<title>ScoreScan Live</title>
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" type="image/png" href="/icons/icon-192.png">
+<link rel="stylesheet" href="/app.css">
+<script defer src="/scores.js"></script>
+<script defer src="/session.js"></script>
+<script defer src="/scoreboard.js"></script>
+</head>
+<body class="displaybody">
+<svg class="sprite" aria-hidden="true" focusable="false">
+ <symbol id="i-qr" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.4"/><rect x="14" y="3" width="7" height="7" rx="1.4"/><rect x="3" y="14" width="7" height="7" rx="1.4"/><path d="M14 14h3v3h-3zM20 14h1M14 20h1M18 18h3v3M20 20h1"/></symbol>
+ <symbol id="i-trophy" viewBox="0 0 24 24"><path d="M7 4h10v5a5 5 0 0 1-10 0z"/><path d="M7 6H4v1a3 3 0 0 0 3 3M17 6h3v1a3 3 0 0 1-3 3M12 14v4M8.5 21h7M10 18h4"/></symbol>
+ <symbol id="i-tv" viewBox="0 0 24 24"><rect x="2.5" y="4.5" width="19" height="13" rx="2"/><path d="M8 21h8M12 17.5V21"/></symbol>
+ <symbol id="i-lock" viewBox="0 0 24 24"><rect x="4.5" y="10" width="15" height="10.5" rx="2.2"/><path d="M8 10V7.5a4 4 0 0 1 8 0V10M12 14v2.5"/></symbol>
+ <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2.5 12S6 5.8 12 5.8 21.5 12 21.5 12 18 18.2 12 18.2 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3"/></symbol>
+ <symbol id="i-expand" viewBox="0 0 24 24"><path d="M9 4H4v5M15 4h5v5M20 15v5h-5M4 15v5h5"/></symbol>
+ <symbol id="i-users" viewBox="0 0 24 24"><path d="M16 20v-1.8a3.7 3.7 0 0 0-3.7-3.7H6.7A3.7 3.7 0 0 0 3 18.2V20"/><circle cx="9.5" cy="7.5" r="3.5"/><path d="M21 20v-1.7a3.7 3.7 0 0 0-2.8-3.6M15.5 4.2a3.5 3.5 0 0 1 0 6.6"/></symbol>
+ <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M4 12h15M13 6l6 6-6 6"/></symbol>
+ <symbol id="i-alert" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5.5M12 16.6v.1"/></symbol>
+</svg>
+
+<header>
+  <a class="brand" href="/scoreboard.html">
+    <span class="brand-mark" aria-hidden="true">S</span>
+    <span class="brand-copy"><strong>ScoreScan</strong><small>Live klassement</small></span>
+  </a>
+  <div class="header-actions">
+    <span id="status" class="status" role="status" aria-live="polite"><i class="status-dot"></i><span class="status-label">Offline</span></span>
+    <button id="fullscreen" class="ghost" type="button" aria-label="Volledig scherm"><svg class="icon" aria-hidden="true"><use href="#i-expand"/></svg><span class="fullscreen-label">Volledig scherm</span></button>
+    <button id="logout" class="ghost hidden" type="button"><svg class="icon" aria-hidden="true"><use href="#i-lock"/></svg>Afmelden</button>
+  </div>
+</header>
+
+<main class="display-main">
+  <form id="auth" class="displayauth">
+    <span class="eyebrow">Publiek scherm</span>
+    <h1>Verbind met het spel</h1>
+    <p>Gebruik dezelfde ruimtenaam en hetzelfde wachtwoord als op het bedieningsscherm. Dit scherm kan alleen meekijken.</p>
+    <label class="field">
+      <span>Ruimtenaam</span>
+      <span class="input-wrap">
+        <svg class="icon" aria-hidden="true"><use href="#i-users"/></svg>
+        <input id="roomName" maxlength="80" required autocomplete="username">
+      </span>
+    </label>
+    <label class="field">
+      <span>Wachtwoord</span>
+      <span class="input-wrap">
+        <svg class="icon" aria-hidden="true"><use href="#i-lock"/></svg>
+        <input id="secret" type="password" maxlength="128" required autocomplete="current-password">
+      </span>
+    </label>
+    <p id="authMessage" class="form-note hidden" role="status"></p>
+    <button id="connect" class="primary" type="submit"><svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg>Scorebord openen</button>
+  </form>
+
+  <section id="board" class="board hidden">
+    <div class="board-head">
+      <div class="board-title">
+        <span class="eyebrow">Live klassement</span>
+        <h1 id="title"></h1>
+        <p id="gameInfo"></p>
+      </div>
+      <div class="board-live">
+        <span class="live-chip">Live</span>
+        <span id="updated" class="updated" role="status" aria-live="polite"></span>
+      </div>
+    </div>
+
+    <div class="board-controls">
+      <label>Spel<select id="gameHistory"><option value="">Actief / meest recente spel volgen</option></select></label>
+      <label>Weergave<select id="scoreView"><option value="total">Totaalpunten</option><option value="questions">Punten per vraag</option></select></label>
+    </div>
+
+    <div id="podium" class="podium" aria-label="Top drie"></div>
+    <ol id="scoreList" class="scorelist boardlist" aria-label="Klassement"></ol>
+    <div id="scoreTable" class="scoretable hidden"></div>
+    <div id="boardEmpty" class="board-empty hidden">
+      <span class="icon-tile"><svg class="icon" aria-hidden="true"><use href="#i-trophy"/></svg></span>
+      <strong>Nog geen scores</strong>
+      <span>Zodra de spelmeester een spel start, verschijnt het klassement hier.</span>
+    </div>
+
+    <footer class="board-footer">
+      <p>ScoreScan · live klassement</p>
+      <p id="footerInfo">Breukdelen worden pas voor weergave afgerond op twee decimalen.</p>
+    </footer>
+  </section>
+</main>
+</body>
+</html>

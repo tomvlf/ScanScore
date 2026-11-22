@@ -1,45 +1,282 @@
 <!doctype html>
 <html lang="nl">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#6657e8"><title>ScoreScan</title><link rel="manifest" href="/manifest.webmanifest"><link rel="icon" type="image/png" href="/icons/icon-192.png"><link rel="stylesheet" href="/app.css"><script defer src="/vendor/html5-qrcode.min.js"></script><script defer src="/scores.js"></script><script defer src="/session.js"></script><script defer src="/app.js"></script></head>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#5a49e3">
+<meta name="description" content="Scan persoonlijke QR-kaarten, verdeel de punten en toon het klassement live.">
+<title>ScoreScan</title>
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" type="image/png" href="/icons/icon-192.png">
+<link rel="stylesheet" href="/app.css">
+<script defer src="/vendor/html5-qrcode.min.js"></script>
+<script defer src="/scores.js"></script>
+<script defer src="/session.js"></script>
+<script defer src="/app.js"></script>
+</head>
 <body>
 <a class="skip" href="#main">Naar inhoud</a>
-<header><a class="brand" href="/"><b>S</b><span><strong>ScoreScan</strong><small>Live spelstudio</small></span></a><div class="row"><span id="status" class="status">Offline</span><button id="logout" class="hidden">Afmelden</button></div></header>
+<svg class="sprite" aria-hidden="true" focusable="false">
+ <symbol id="i-play" viewBox="0 0 24 24"><path d="M8 5.4v13.2L19 12z"/></symbol>
+ <symbol id="i-users" viewBox="0 0 24 24"><path d="M16 20v-1.8a3.7 3.7 0 0 0-3.7-3.7H6.7A3.7 3.7 0 0 0 3 18.2V20"/><circle cx="9.5" cy="7.5" r="3.5"/><path d="M21 20v-1.7a3.7 3.7 0 0 0-2.8-3.6M15.5 4.2a3.5 3.5 0 0 1 0 6.6"/></symbol>
+ <symbol id="i-trophy" viewBox="0 0 24 24"><path d="M7 4h10v5a5 5 0 0 1-10 0z"/><path d="M7 6H4v1a3 3 0 0 0 3 3M17 6h3v1a3 3 0 0 1-3 3M12 14v4M8.5 21h7M10 18h4"/></symbol>
+ <symbol id="i-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></symbol>
+ <symbol id="i-qr" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.4"/><rect x="14" y="3" width="7" height="7" rx="1.4"/><rect x="3" y="14" width="7" height="7" rx="1.4"/><path d="M14 14h3v3h-3zM20 14h1M14 20h1M18 18h3v3M20 20h1"/></symbol>
+ <symbol id="i-camera" viewBox="0 0 24 24"><path d="M4 7.5h3l1.4-2h7.2l1.4 2h3a1.5 1.5 0 0 1 1.5 1.5v8.5a1.5 1.5 0 0 1-1.5 1.5H4A1.5 1.5 0 0 1 2.5 17.5V9A1.5 1.5 0 0 1 4 7.5z"/><circle cx="12" cy="13" r="3.4"/></symbol>
+ <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.2 4.2L19 7"/></symbol>
+ <symbol id="i-alert" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5.5M12 16.6v.1"/></symbol>
+ <symbol id="i-external" viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-8 8"/><path d="M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5"/></symbol>
+ <symbol id="i-undo" viewBox="0 0 24 24"><path d="M9 7L4 12l5 5"/><path d="M4 12h9a6 6 0 0 1 6 6v1"/></symbol>
+ <symbol id="i-chevron" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></symbol>
+ <symbol id="i-lock" viewBox="0 0 24 24"><rect x="4.5" y="10" width="15" height="10.5" rx="2.2"/><path d="M8 10V7.5a4 4 0 0 1 8 0V10M12 14v2.5"/></symbol>
+ <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2.5 12S6 5.8 12 5.8 21.5 12 21.5 12 18 18.2 12 18.2 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3"/></symbol>
+ <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+ <symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></symbol>
+ <symbol id="i-history" viewBox="0 0 24 24"><path d="M3.5 12a8.5 8.5 0 1 0 2.6-6.1"/><path d="M3.5 4.5V9H8"/><path d="M12 7.5V12l3 2"/></symbol>
+ <symbol id="i-tv" viewBox="0 0 24 24"><rect x="2.5" y="4.5" width="19" height="13" rx="2"/><path d="M8 21h8M12 17.5V21"/></symbol>
+ <symbol id="i-stop" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/></symbol>
+ <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4.5h6V7M6.5 7l.8 12a1.5 1.5 0 0 0 1.5 1.4h6.4a1.5 1.5 0 0 0 1.5-1.4l.8-12M10 11v5M14 11v5"/></symbol>
+ <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M4 12h15M13 6l6 6-6 6"/></symbol>
+ <symbol id="i-wifi" viewBox="0 0 24 24"><path d="M3.5 9.5a13 13 0 0 1 17 0M6.5 13a8.6 8.6 0 0 1 11 0M9.5 16.4a4 4 0 0 1 5 0"/><circle cx="12" cy="19.5" r="1"/></symbol>
+</svg>
+
+<header>
+  <a class="brand" href="/">
+    <span class="brand-mark" aria-hidden="true">S</span>
+    <span class="brand-copy"><strong>ScoreScan</strong><small id="roomTitle">Live spelstudio</small></span>
+  </a>
+  <div class="header-actions">
+    <span id="status" class="status" role="status" aria-live="polite"><i class="status-dot"></i><span class="status-label">Offline</span></span>
+    <button id="logout" class="ghost hidden" type="button"><svg class="icon" aria-hidden="true"><use href="#i-lock"/></svg>Afmelden</button>
+  </div>
+</header>
+
 <main id="main">
  <section id="login" class="login">
-  <div class="intro"><span class="eyebrow">Fysiek spelen, digitaal scoren</span><h1>Scan de winnaars. Verdeel de punten.</h1><p>Iedere winnaar krijgt een gelijk deel van de puntenpot. De scores verschijnen live.</p><div class="chips"><span>Persoonlijke QR-kaarten</span><span>Eenvoudig corrigeren</span><span>Live scorebord</span></div></div>
-  <form id="loginForm" class="card auth"><span class="eyebrow">Spelmeester</span><h2>Open je spelruimte</h2><p class="muted">Kies een naam en wachtwoord. Na het maken ben je meteen aangemeld.</p>
-   <label>Ruimtenaam<input id="roomName" placeholder="Bijv. Familiequiz" maxlength="80" required autocomplete="username"></label>
-   <label>Wachtwoord<input id="secret" type="password" required maxlength="128" pattern="[0-9]{8,16}|.{12,128}" autocomplete="current-password"><small>Minstens 12 tekens of 8–16 cijfers</small></label>
-   <div class="row"><button id="create" class="primary" type="button">Ruimte maken</button><button id="connect" type="submit">Aanmelden</button></div><div id="loginMessage" class="token hidden" role="status"></div>
+  <div class="intro">
+    <span class="eyebrow"><span class="eyebrow-dot"></span>Fysiek spelen, digitaal scoren</span>
+    <h1>Scan de winnaars.<br><span class="gradient-text">Verdeel de punten.</span></h1>
+    <p class="lede">Iedere winnaar krijgt een gelijk deel van de puntenpot. De scores verschijnen meteen op het grote scherm, zonder rekenwerk of omroepen.</p>
+    <ul class="feature-list">
+      <li><span><svg class="icon" aria-hidden="true"><use href="#i-qr"/></svg></span><div><strong>Persoonlijke QR-kaarten</strong><small>Koppel een kaart eenmalig aan een persoon of ploeg.</small></div></li>
+      <li><span><svg class="icon" aria-hidden="true"><use href="#i-camera"/></svg></span><div><strong>Scannen in één beweging</strong><small>De camera blijft klaar bij elke volgende vraag.</small></div></li>
+      <li><span><svg class="icon" aria-hidden="true"><use href="#i-tv"/></svg></span><div><strong>Live op het grote scherm</strong><small>Een rustig klassement voor tv, laptop of beamer.</small></div></li>
+    </ul>
+    <div class="mini-board" aria-hidden="true">
+      <div class="mini-head"><span>Live klassement</span><span class="mini-live">Live</span></div>
+      <div class="mini-row first"><span class="mini-rank">1</span><span class="mini-name">Lena De Vos</span><b>50</b></div>
+      <div class="mini-row"><span class="mini-rank">2</span><span class="mini-name">Team Vuurwerk</span><b>41,67</b></div>
+      <div class="mini-row"><span class="mini-rank">3</span><span class="mini-name">De Rekenaars</span><b>25</b></div>
+    </div>
+  </div>
+
+  <form id="loginForm" class="card auth" autocomplete="on">
+    <div class="auth-head">
+      <span class="eyebrow">Spelmeester</span>
+      <h2>Open je spelruimte</h2>
+      <p>Kies een ruimtenaam en wachtwoord. Nieuwe ruimte of terugkeren: het werkt allebei met dezelfde velden.</p>
+    </div>
+    <label class="field">
+      <span>Ruimtenaam</span>
+      <span class="input-wrap">
+        <svg class="icon" aria-hidden="true"><use href="#i-users"/></svg>
+        <input id="roomName" placeholder="Bijv. Familiequiz" maxlength="80" required autocomplete="username">
+      </span>
+    </label>
+    <label class="field">
+      <span>Wachtwoord</span>
+      <span class="input-wrap">
+        <svg class="icon" aria-hidden="true"><use href="#i-lock"/></svg>
+        <input id="secret" type="password" required maxlength="128" pattern="[0-9]{8,16}|.{12,128}" autocomplete="current-password">
+        <button id="toggleSecret" class="input-action" type="button" aria-label="Wachtwoord tonen"><svg class="icon" aria-hidden="true"><use href="#i-eye"/></svg></button>
+      </span>
+      <small>Minstens 12 tekens of 8–16 cijfers.</small>
+    </label>
+    <div id="loginMessage" class="form-note hidden" role="status"></div>
+    <div class="auth-actions">
+      <button id="connect" class="primary" type="submit"><svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg>Aanmelden</button>
+      <button id="create" class="secondary" type="button"><svg class="icon" aria-hidden="true"><use href="#i-plus"/></svg>Nieuwe ruimte</button>
+    </div>
+    <div class="auth-help">
+      <svg class="icon" aria-hidden="true"><use href="#i-qr"/></svg>
+      <p><strong>Voor het eerst?</strong> Kies een naam en wachtwoord en klik op <strong>Nieuwe ruimte</strong>. Je bent daarna meteen aangemeld op dit apparaat.</p>
+    </div>
+    <p class="secure-note"><svg class="icon" aria-hidden="true"><use href="#i-lock"/></svg>Beveiligde ruimte · aanmelding blijft 30 dagen actief</p>
   </form>
  </section>
+
  <section id="app" class="app hidden">
-  <aside class="rail"><button class="nav active" data-page="play">Spelen</button><button class="nav" data-page="players">Deelnemers</button><button class="nav" data-page="scores">Scores</button><button class="nav" data-page="more">Meer</button><a id="display" class="nav" target="_blank" rel="noopener">Publiek scherm</a></aside>
+  <aside class="rail" aria-label="Hoofdnavigatie">
+    <span class="rail-label">Spelstudio</span>
+    <button class="nav active" type="button" data-page="play"><svg class="icon" aria-hidden="true"><use href="#i-play"/></svg><span>Spelen</span></button>
+    <button class="nav" type="button" data-page="players"><svg class="icon" aria-hidden="true"><use href="#i-users"/></svg><span>Deelnemers</span></button>
+    <button class="nav" type="button" data-page="scores"><svg class="icon" aria-hidden="true"><use href="#i-trophy"/></svg><span>Scores</span></button>
+    <button class="nav" type="button" data-page="more"><svg class="icon" aria-hidden="true"><use href="#i-more"/></svg><span>Meer</span></button>
+    <a id="display" class="nav nav-link" target="_blank" rel="noopener"><svg class="icon" aria-hidden="true"><use href="#i-tv"/></svg><span>Publiek scherm</span><svg class="icon" aria-hidden="true"><use href="#i-external"/></svg></a>
+    <div class="rail-tip"><b>Tip voor de quizmaster</b><small>Laat de camera aan staan tussen vragen. Eén scan is genoeg; de pot verdeelt zichzelf.</small></div>
+  </aside>
+
   <div class="work">
    <section id="play" class="page active">
-    <div class="pagehead"><div><span class="eyebrow">Spelbediening</span><h1 id="playTitle">Nog geen spel</h1><p id="gameStatus" class="muted">Voeg spelers toe en start een spel.</p><p id="poolInfo" class="muted" role="status"></p></div><button id="returnToGame" class="hidden">Naar het actieve spel</button></div>
-    <form id="gameForm" class="card game-start"><h2>Nieuw spel starten</h2><p class="muted">Scores beginnen op nul. Spelers en eerdere spellen blijven bewaard.</p><label>Puntenpot per vraag<input id="pointsPerQuestion" type="number" min="1" max="1000000" step="1" required placeholder="Bijv. 50"></label><button id="startGame" class="primary" type="submit">Spel starten</button></form>
-    <div class="playgrid">
-     <section class="card scanner"><div class="sectionhead"><h2>Scan een winnaar</h2><div class="row"><button id="start" class="primary" disabled>Camera starten</button><button id="stop" class="hidden">Camera stoppen</button></div></div><div id="reader"></div><div id="feedback" class="feedback ready" role="status" aria-live="assertive"><b>◎</b><div><strong>Start eerst een spel</strong><p>Spelers kun je op elk moment toevoegen.</p></div></div><button id="undo" class="link" disabled>Laatste scan ongedaan maken</button></section>
-     <aside><section class="card"><div class="sectionhead"><div><span class="eyebrow">Deze vraag</span><h2>Winnaars</h2></div><span id="winnerCount" class="count">0</span></div><ol id="winners" class="winners"></ol></section><div class="tip"><small>GELIJKE DELEN</small><p>Bij 50 punten en 2 winnaars krijgt iedereen 25 punten. Iedere extra winnaar herverdeelt de puntenpot.</p></div></aside>
+    <div class="pagehead">
+      <div class="pagehead-copy">
+        <span class="eyebrow">Spelbediening</span>
+        <h1 id="playTitle">Nog geen spel</h1>
+        <p id="gameStatus" class="muted">Voeg spelers toe en start een spel.</p>
+      </div>
+      <div class="play-meta" aria-hidden="true">
+        <div class="stat-chip"><span>Puntenpot</span><b id="potValue">—</b></div>
+        <div class="stat-chip accent"><span>Per winnaar</span><b id="shareValue">—</b></div>
+      </div>
+      <div class="pagehead-actions"><button id="returnToGame" class="secondary hidden" type="button"><svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg>Naar het actieve spel</button></div>
     </div>
-    <div id="playActions" class="play-actions hidden"><span id="nextHint">Klaar met scannen?</span><button id="next" class="primary">Volgende vraag</button></div>
-    <details id="gameControls" class="card question-controls hidden"><summary>Vraag corrigeren of spel stoppen</summary><div class="question-options"><label>Vraag bekijken of corrigeren<select id="questionSelect"></select></label><div class="row"><button id="previous">Vorige vraag</button><button id="stopGame" class="danger">Spel stoppen</button></div></div></details>
+    <p id="poolInfo" class="pool-info" role="status"></p>
+
+    <form id="gameForm" class="card game-start">
+      <div class="game-start-head">
+        <span class="icon-tile"><svg class="icon" aria-hidden="true"><use href="#i-play"/></svg></span>
+        <div><h2>Nieuw spel starten</h2><p class="muted">Scores beginnen op nul. Spelers, QR-kaarten en eerdere spellen blijven bewaard.</p></div>
+      </div>
+      <div class="game-start-row">
+        <label class="field"><span>Puntenpot per vraag</span><span class="input-wrap"><input id="pointsPerQuestion" type="number" min="1" max="1000000" step="1" required placeholder="Bijv. 50"></span></label>
+        <div class="presets" role="group" aria-label="Snelle puntenkeuzes">
+          <button class="chip" type="button" data-points="25">25</button>
+          <button class="chip" type="button" data-points="50">50</button>
+          <button class="chip" type="button" data-points="75">75</button>
+          <button class="chip" type="button" data-points="100">100</button>
+        </div>
+        <button id="startGame" class="primary" type="submit"><svg class="icon" aria-hidden="true"><use href="#i-play"/></svg>Spel starten</button>
+      </div>
+    </form>
+
+    <div class="playgrid">
+     <section class="card scanner">
+      <div class="sectionhead">
+       <div><span class="eyebrow">Camera</span><h2>Scan een winnaar</h2></div>
+       <div class="row"><button id="start" class="primary" type="button" disabled><svg class="icon" aria-hidden="true"><use href="#i-camera"/></svg>Camera starten</button><button id="stop" class="ghost hidden" type="button"><svg class="icon" aria-hidden="true"><use href="#i-stop"/></svg>Stoppen</button></div>
+      </div>
+      <div id="reader" class="reader">
+        <div class="reader-empty">
+          <span class="icon-tile"><svg class="icon" aria-hidden="true"><use href="#i-qr"/></svg></span>
+          <strong>Camera staat klaar</strong>
+          <small>Start de camera en houd de persoonlijke QR-kaart voor het beeld.</small>
+        </div>
+      </div>
+      <div id="feedback" class="feedback ready" role="status" aria-live="assertive"><b>◎</b><div><strong>Start eerst een spel</strong><p>Spelers kun je op elk moment toevoegen.</p></div></div>
+      <div class="scanner-foot">
+        <button id="undo" class="link" type="button" disabled><svg class="icon" aria-hidden="true"><use href="#i-undo"/></svg>Laatste scan ongedaan maken</button>
+        <span class="scan-tip">Eén kaart per winnaar</span>
+      </div>
+     </section>
+
+     <aside class="winners-col">
+      <section class="card winners-card">
+        <div class="sectionhead"><div><span class="eyebrow">Deze vraag</span><h2>Winnaars</h2></div><span id="winnerCount" class="count">0</span></div>
+        <ol id="winners" class="winners"></ol>
+      </section>
+      <div class="tip"><span class="tip-icon">÷</span><div><small>GELIJKE DELEN</small><p>Bij <b>50 punten</b> en 2 winnaars krijgt iedereen 25 punten. Elke extra winnaar herverdeelt de pot meteen.</p></div></div>
+     </aside>
+    </div>
+
+    <div id="playActions" class="play-actions hidden">
+      <div><span id="nextHint">Klaar met scannen?</span><small id="nextSub">De volgende vraag begint met een lege winnaarslijst.</small></div>
+      <button id="next" class="primary" type="button">Volgende vraag<svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></button>
+    </div>
+
+    <details id="gameControls" class="card question-controls hidden">
+      <summary><span><svg class="icon" aria-hidden="true"><use href="#i-undo"/></svg>Vraag corrigeren of spel stoppen</span><svg class="icon" aria-hidden="true"><use href="#i-chevron"/></svg></summary>
+      <div class="question-options">
+        <label class="field"><span>Vraag bekijken of corrigeren</span><select id="questionSelect"></select></label>
+        <div class="row"><button id="previous" type="button"><svg class="icon" aria-hidden="true"><use href="#i-undo"/></svg>Vorige vraag</button><button id="stopGame" class="danger-ghost" type="button"><svg class="icon" aria-hidden="true"><use href="#i-stop"/></svg>Spel stoppen</button></div>
+      </div>
+    </details>
    </section>
+
    <section id="players" class="page">
-    <div class="pagehead"><div><span class="eyebrow">Registratie</span><h1>Deelnemers</h1><p class="muted">Spelers blijven gekoppeld aan deze ruimte, ook na een spel.</p></div><span id="playerCount" class="pill">0 deelnemers</span></div>
-    <section class="card add"><div class="two"><label>Naam<input id="playerName" maxlength="60" placeholder="Bijv. Team Rood"></label><label>Type<select id="playerType"><option value="person">Persoon</option><option value="team">Ploeg</option></select></label></div><button id="pair" class="primary wide">Camera openen en QR koppelen</button><div id="pairReader"></div><p id="pairStatus" class="muted center" role="status">Vul een naam in en open de camera om een QR-code te koppelen.</p></section><div id="playerCards" class="playergrid"></div>
+    <div class="pagehead">
+      <div class="pagehead-copy"><span class="eyebrow">Registratie</span><h1>Deelnemers</h1><p class="muted">Spelers en ploegen blijven gekoppeld aan deze ruimte, ook na een spel.</p></div>
+      <span id="playerCount" class="pill">0 deelnemers</span>
+    </div>
+    <section class="card add-player">
+      <div class="add-player-head"><span class="icon-tile"><svg class="icon" aria-hidden="true"><use href="#i-qr"/></svg></span><div><h2>Nieuwe deelnemer</h2><p>Vul een naam in en koppel meteen de persoonlijke QR-kaart.</p></div></div>
+      <div class="add-player-grid">
+        <label class="field"><span>Naam</span><input id="playerName" maxlength="60" placeholder="Bijv. Team Rood" autocomplete="off"></label>
+        <label class="field"><span>Type</span><select id="playerType"><option value="person">Persoon</option><option value="team">Ploeg</option></select></label>
+        <button id="pair" class="primary" type="button"><svg class="icon" aria-hidden="true"><use href="#i-camera"/></svg>QR-kaart koppelen</button>
+      </div>
+      <div id="pairReader" class="pair-reader"></div>
+      <p id="pairStatus" class="hint" role="status" aria-live="polite">Vul een naam in en open de camera om een QR-code te koppelen.</p>
+    </section>
+    <div class="players-head"><h2>In deze ruimte</h2><span class="muted">Verwijderen laat behaalde punten in de spelhistoriek staan.</span></div>
+    <div id="playerCards" class="playergrid"></div>
    </section>
+
    <section id="scores" class="page">
-    <div class="pagehead"><div><span class="eyebrow">Live klassement</span><h1>Scores</h1><p class="muted">Alleen het gekozen spel. Breukdelen worden pas voor weergave afgerond.</p></div><a id="displayTop" class="button" target="_blank" rel="noopener">Open op groot scherm</a></div>
-    <section class="card"><label>Weergave<select id="scoreView"><option value="total">Totaalpunten</option><option value="questions">Punten per vraag</option></select></label><ol id="scoreList" class="scorelist"></ol><div id="scoreTable" class="scoretable hidden"></div></section>
+    <div class="pagehead">
+      <div class="pagehead-copy"><span class="eyebrow">Live klassement</span><h1>Scores</h1><p class="muted">Alleen het gekozen spel. Breukdelen worden pas voor weergave afgerond.</p></div>
+      <div class="pagehead-actions"><a id="displayTop" class="button secondary" target="_blank" rel="noopener"><svg class="icon" aria-hidden="true"><use href="#i-tv"/></svg>Open op groot scherm</a></div>
+    </div>
+    <section class="card scores-card">
+      <div class="score-toolbar">
+        <label class="field"><span>Weergave</span><select id="scoreView"><option value="total">Totaalpunten</option><option value="questions">Punten per vraag</option></select></label>
+        <p class="muted">De puntentelling blijft exact; alleen de weergave rondt af op twee decimalen.</p>
+      </div>
+      <div id="podium" class="podium host-podium"></div>
+      <ol id="scoreList" class="scorelist"></ol>
+      <div id="scoreTable" class="scoretable hidden"></div>
+    </section>
    </section>
+
    <section id="more" class="page">
-    <div class="pagehead"><div><span class="eyebrow">Spelbeheer</span><h1>Meer</h1><p class="muted">Eerdere spellen en het publieke scorebord.</p></div></div>
-    <div class="twocards"><section class="card"><h2>Spelhistoriek</h2><p class="muted">Gestopte spellen blijven alleen-lezen beschikbaar. Correcties doe je tijdens het spel door een eerdere vraag te kiezen.</p><label>Spel<select id="gameHistory"></select></label><button id="viewGame">Gekozen spel bekijken</button></section><section class="card"><h2>Publiek scorebord</h2><p class="muted">Voor tv, laptop of beamer. Meld je aan met dezelfde ruimtenaam en hetzelfde wachtwoord. Op dit apparaat ben je al aangemeld; het scorescherm blijft alleen-lezen.</p><a id="displayMore" class="button" target="_blank" rel="noopener">Scorescherm openen</a></section></div>
+    <div class="pagehead">
+      <div class="pagehead-copy"><span class="eyebrow">Spelbeheer</span><h1>Meer</h1><p class="muted">Eerdere spellen, het publieke scherm en je sessie.</p></div>
+    </div>
+    <div class="twocards">
+      <section class="card">
+        <span class="icon-tile"><svg class="icon" aria-hidden="true"><use href="#i-history"/></svg></span>
+        <h2>Spelhistoriek</h2>
+        <p class="muted">Gestopte spellen blijven alleen-lezen beschikbaar. Correcties doe je tijdens het spel via een eerdere vraag.</p>
+        <label class="field"><span>Spel</span><select id="gameHistory"></select></label>
+        <button id="viewGame" class="secondary wide" type="button"><svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg>Gekozen spel bekijken</button>
+      </section>
+      <section class="card">
+        <span class="icon-tile"><svg class="icon" aria-hidden="true"><use href="#i-tv"/></svg></span>
+        <h2>Publiek scorebord</h2>
+        <p class="muted">Voor tv, laptop of beamer. Meld je aan met dezelfde ruimtenaam en hetzelfde wachtwoord. Op dit apparaat gebeurt dat automatisch.</p>
+        <div class="url-box"><code id="displayUrl">/scoreboard.html</code><button id="copyDisplay" class="icon-button" type="button" aria-label="Link naar het scorebord kopiëren"><svg class="icon" aria-hidden="true"><use href="#i-copy"/></svg></button></div>
+        <a id="displayMore" class="button primary wide" target="_blank" rel="noopener"><svg class="icon" aria-hidden="true"><use href="#i-external"/></svg>Scorescherm openen</a>
+        <small class="muted">Het scherm kan niets wijzigen en werkt ook op een oudere laptop of tv-browser.</small>
+      </section>
+    </div>
+    <section class="card session-card">
+      <div><strong>Deze sessie</strong><p>Afmelden trekt de aanmelding op dit apparaat in. Gebruik dit op gedeelde toestellen.</p></div>
+      <button id="logoutMore" class="ghost" type="button"><svg class="icon" aria-hidden="true"><use href="#i-lock"/></svg>Afmelden</button>
+    </section>
    </section>
   </div>
  </section>
 </main>
-<nav id="mobileNav" class="mobile hidden"><button class="active" data-page="play">Spelen</button><button data-page="players">Spelers</button><button data-page="scores">Scores</button><button data-page="more">Meer</button></nav><div id="toast" class="toast" aria-live="polite"></div><div id="confetti"></div>
-</body></html>
+
+<nav id="mobileNav" class="mobile hidden" aria-label="Navigatie">
+  <button class="active" type="button" data-page="play"><svg class="icon" aria-hidden="true"><use href="#i-play"/></svg>Spelen</button>
+  <button type="button" data-page="players"><svg class="icon" aria-hidden="true"><use href="#i-users"/></svg>Spelers</button>
+  <button type="button" data-page="scores"><svg class="icon" aria-hidden="true"><use href="#i-trophy"/></svg>Scores</button>
+  <button type="button" data-page="more"><svg class="icon" aria-hidden="true"><use href="#i-more"/></svg>Meer</button>
+</nav>
+
+<dialog id="confirmDialog" class="confirm" aria-labelledby="confirmTitle">
+  <form method="dialog" class="confirm-card">
+    <span class="icon-tile" id="confirmIcon"><svg class="icon" aria-hidden="true"><use href="#i-alert"/></svg></span>
+    <h2 id="confirmTitle">Weet je het zeker?</h2>
+    <p id="confirmText"></p>
+    <div class="row confirm-actions">
+      <button value="cancel" type="submit">Annuleren</button>
+      <button id="confirmOk" class="danger-ghost" value="confirm" type="submit">Verwijderen</button>
+    </div>
+  </form>
+</dialog>
+
+<div id="toast" class="toast" aria-live="polite"></div>
+<div id="confetti"></div>
+</body>
+</html>
