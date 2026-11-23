@@ -3,7 +3,7 @@ const test=require('node:test'),assert=require('node:assert/strict'),fs=require(
 const source=fs.readFileSync('server.js','utf8');
 
 function application({production=false,trustProxyHops=0}={}){
- const rooms=new Map(),sessions=new Map();let handle;
+ const rooms=new Map(),sessions=new Map(),tickets=new Map();let handle;
  const client={
   async query(sql,values=[]){
    if(sql.startsWith('INSERT INTO rooms')){
@@ -21,6 +21,18 @@ function application({production=false,trustProxyHops=0}={}){
     sessions.set(id,{id,room_id:values[0],token_hash:values[1],expires_at:Date.now()+(sql.includes('30 days')?30*24:8)*60*60e3});
     return {rows:[{id,expires_at:new Date(sessions.get(id).expires_at)}],rowCount:1};
    }
+   if(sql.startsWith('INSERT INTO socket_tickets')){
+    tickets.set(values[1].toString('hex'),{session_id:values[0],expires_at:Date.now()+30000});
+    return {rows:[],rowCount:1};
+   }
+   if(sql.startsWith('WITH claimed AS')){
+    const key=values[0].toString('hex'),ticket=tickets.get(key);
+    if(ticket)tickets.delete(key);
+    const session=ticket?.expires_at>Date.now()&&sessions.get(ticket.session_id);
+    const room=session&&[...rooms.values()].find(r=>r.id===session.room_id);
+    const active=session&&!session.revoked_at&&session.expires_at>Date.now();
+    return {rows:room&&active?[{...room,session_id:session.id,session_expires_at:new Date(session.expires_at)}]:[],rowCount:room&&active?1:0};
+   }
    if(sql.includes('FROM host_sessions s JOIN rooms')){
     const session=[...sessions.values()].find(s=>(sql.includes('s.id=$1')?s.id===values[0]:s.token_hash.equals(values[0]))&&!s.revoked_at&&s.expires_at>Date.now());
     const room=session&&[...rooms.values()].find(r=>r.id===session.room_id);
@@ -28,6 +40,10 @@ function application({production=false,trustProxyHops=0}={}){
    }
    if(sql.startsWith('UPDATE host_sessions SET revoked_at')){
     sessions.get(values[0]).revoked_at=Date.now();return {rows:[],rowCount:1};
+   }
+   if(sql.startsWith('DELETE FROM socket_tickets WHERE session_id')){
+    for(const [hash,ticket] of tickets)if(ticket.session_id===values[0])tickets.delete(hash);
+    return {rows:[],rowCount:1};
    }
    if(sql.startsWith('SELECT 1 FROM display_tokens'))return {rows:[{}],rowCount:1};
    return {rows:[],rowCount:0};
@@ -50,6 +66,7 @@ function application({production=false,trustProxyHops=0}={}){
  vm.runInContext(source,context);
  return {
   sessions,
+  tickets,
   async request(method,url,body,headers={}){
    const request=new EventEmitter();Object.assign(request,{method,url,headers:{origin:'http://localhost:8080',...headers},socket:{remoteAddress:'test-client'}});
    const response={statusCode:200,headers:{},setHeader(name,value){this.headers[name.toLowerCase()]=value},writeHead(status){this.statusCode=status},end(body){this.body=JSON.parse(body)}};
@@ -137,20 +154,25 @@ test('persistent cookie restores both screens and logout revokes future access',
  await assert.rejects(app.authenticate({role:'host'},cookie),/session_expired/);
 });
 
-test('short-lived signed tickets authenticate sockets without a forwarded cookie',async()=>{
+test('one-time opaque tickets authenticate sockets without a forwarded cookie',async()=>{
  const app=application({production:true}),hostSecret='a long host password';
  await app.create({roomName:'Family Quiz',hostSecret});
  const login=await app.request('POST','/api/session',{roomName:'Family Quiz',secret:hostSecret});
- assert.match(login.body.socketTicket,/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/);
- for(const role of ['host','display']){
-  const auth=await app.authenticate({role,socketTicket:login.body.socketTicket},'');
-  assert.equal(auth.socket.authed,true);
-  assert.equal(auth.socket.role,role);
- }
+ assert.match(login.body.socketTicket,/^[A-Za-z0-9_-]{43}$/);
+ const restored=await app.request('GET','/api/session',{}, {cookie:login.headers['set-cookie']});
+ const host=await app.authenticate({role:'host',socketTicket:login.body.socketTicket},'');
+ assert.equal(host.socket.authed,true);
+ await assert.rejects(app.authenticate({role:'host',socketTicket:login.body.socketTicket},''),/session_expired/);
+ const display=await app.authenticate({role:'display',socketTicket:restored.body.socketTicket},'');
+ assert.equal(display.socket.authed,true);
  const tampered=login.body.socketTicket.slice(0,-1)+(login.body.socketTicket.endsWith('a')?'b':'a');
  await assert.rejects(app.authenticate({role:'host',socketTicket:tampered},''),/session_expired/);
+ const expired=await app.request('GET','/api/session',{}, {cookie:login.headers['set-cookie']});
+ for(const ticket of app.tickets.values())ticket.expires_at=Date.now()-1;
+ await assert.rejects(app.authenticate({role:'host',socketTicket:expired.body.socketTicket},''),/session_expired/);
+ const beforeLogout=await app.request('GET','/api/session',{}, {cookie:login.headers['set-cookie']});
  await app.request('DELETE','/api/session',{}, {cookie:login.headers['set-cookie']});
- await assert.rejects(app.authenticate({role:'host',socketTicket:login.body.socketTicket},''),/session_expired/);
+ await assert.rejects(app.authenticate({role:'host',socketTicket:beforeLogout.body.socketTicket},''),/session_expired/);
 });
 
 test('missing, forged and expired sessions cannot restore access',async()=>{

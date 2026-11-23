@@ -80,19 +80,19 @@ test('scoreboard uses room credentials, clears the password and opens a read-onl
  assert.deepEqual(JSON.parse(app.requests.find(r=>r.method==='POST').body),{roomName:'Family Quiz',secret:'a long host password'});
  assert.equal($('#secret').value,'');
  app.sockets[0].onopen();
- assert.deepEqual(app.sockets[0].messages,[{type:'auth',role:'display',roomName:'Family Quiz',secret:'a long host password'}]);
+ assert.deepEqual(app.sockets[0].messages,[{type:'auth',role:'display'}]);
  app.sockets[0].onmessage({data:JSON.stringify({type:'auth.ok',state:{title:'Family Quiz',games:[],players:[],game:null,revision:1}})});
  assert.equal($('#auth').classList.contains('hidden'),true);
  assert.equal($('#board').classList.contains('hidden'),false);
  assert.equal($('#logout').classList.contains('hidden'),false);
 });
 
-test('scoreboard authenticates a new socket once with the submitted credentials',async()=>{
+test('scoreboard authenticates a new socket once with a short-lived ticket',async()=>{
  const app=await scoreboard({sessionResponse:{roomName:'Family Quiz',socketTicket:'signed-ticket'}});
  app.$('#roomName').value='Family Quiz';app.$('#secret').value='a long host password';
  await app.$('#auth').onsubmit({preventDefault(){}});
  app.sockets[0].onopen();
- assert.deepEqual(app.sockets[0].messages,[{type:'auth',role:'display',roomName:'Family Quiz',secret:'a long host password'}]);
+ assert.deepEqual(app.sockets[0].messages,[{type:'auth',role:'display',socketTicket:'signed-ticket'}]);
 });
 
 test('scoreboard restores after reopening without a password and can log out',async()=>{
@@ -111,7 +111,7 @@ test('scoreboard shows invalid credentials and returns to login when a session e
  assert.equal(invalid.sockets.length,0);
  assert.match(invalid.$('#authMessage').textContent,/Ruimtenaam of wachtwoord is onjuist/);
  const expired=await scoreboard({savedSession:{roomName:'Family Quiz'}});
- expired.sockets[0].onclose({code:4403});
+ expired.sockets[0].onclose({code:4401});
  assert.equal(expired.$('#auth').classList.contains('hidden'),false);
  assert.equal(expired.$('#board').classList.contains('hidden'),true);
  assert.match(expired.$('#authMessage').textContent,/aanmelding is verlopen/);

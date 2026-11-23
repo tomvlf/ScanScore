@@ -126,7 +126,9 @@ async function connect(resume = false) {
       $('#logout').classList.add('hidden');
       state = null;
       $('#authMessage').classList.remove('hidden');
-      $('#authMessage').textContent = event.code === 4403 || event.code === 4401 ? 'Je aanmelding is verlopen. Meld je opnieuw aan.' : 'Geen verbinding. Probeer opnieuw.';
+      $('#authMessage').textContent = event.code === 4401
+        ? 'Je aanmelding is verlopen. Meld je opnieuw aan.'
+        : event.code === 4403 ? 'Je aanmelding kon niet worden bevestigd. Probeer opnieuw.' : 'Geen verbinding. Probeer opnieuw.';
     };
   } catch (error) {
     $('#authMessage').classList.remove('hidden');

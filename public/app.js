@@ -744,7 +744,7 @@ async function connect(name = $('#roomName').value.trim(), password = $('#secret
 
     socket.onclose = event => {
       if (ws !== socket) return;
-      status(event.code === 4403 ? 'Aanmelding mislukt' : 'Offline');
+      status(event.code === 4401 ? 'Aanmelding verlopen' : event.code === 4403 ? 'Aanmelding mislukt' : 'Offline');
       if (scanner || pairScanner) cameraAction(stopCameras).catch(error => feedback('error', 'Camera kon niet stoppen', cameraError(error)));
       if (event.code === 4403 || event.code === 4401) {
         state = null;
@@ -752,7 +752,7 @@ async function connect(name = $('#roomName').value.trim(), password = $('#secret
         $('#app').classList.add('hidden');
         $('#mobileNav').classList.add('hidden');
         $('#logout').classList.add('hidden');
-        loginMessage('Je aanmelding is verlopen. Meld je opnieuw aan.');
+        loginMessage(event.code === 4401 ? 'Je aanmelding is verlopen. Meld je opnieuw aan.' : 'Je aanmelding kon niet worden bevestigd. Probeer opnieuw.');
       } else if (!state) {
         loginMessage('Verbinding verbroken. Probeer opnieuw aan te melden.');
       } else {

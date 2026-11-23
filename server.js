@@ -187,20 +187,16 @@ async function savedSession(c,req){
   FROM host_sessions s JOIN rooms r ON r.id=s.room_id
   WHERE s.token_hash=$1 AND s.revoked_at IS NULL AND s.expires_at>now()`,[hmac('browser-session:'+token)])).rows[0]||null;
 }
-function socketTicket(sessionId){
- const payload=Buffer.from(JSON.stringify({sessionId,expiresAt:Date.now()+30000})).toString('base64url');
- return payload+'.'+hmac('socket-ticket:'+payload).toString('base64url');
-}
 async function ticketSession(c,ticket){
- if(typeof ticket!=='string'||ticket.length>512)return null;
- const parts=ticket.split('.'),payload=parts[0],signature=parts.length===2?Buffer.from(parts[1],'base64url'):null;
- if(!payload||!signature||signature.length!==32||!safeEq(signature,hmac('socket-ticket:'+payload)))return null;
- let data;
- try{data=JSON.parse(Buffer.from(payload,'base64url').toString('utf8'))}catch{return null}
- if(typeof data.sessionId!=='string'||!Number.isSafeInteger(data.expiresAt)||data.expiresAt<=Date.now())return null;
- return (await c.query(`SELECT r.*,s.id AS session_id,s.expires_at AS session_expires_at
-  FROM host_sessions s JOIN rooms r ON r.id=s.room_id
-  WHERE s.id=$1 AND s.revoked_at IS NULL AND s.expires_at>now()`,[data.sessionId])).rows[0]||null;
+ if(typeof ticket!=='string'||!/^[A-Za-z0-9_-]{43}$/.test(ticket))return null;
+ return (await c.query(`WITH claimed AS(
+   DELETE FROM socket_tickets
+   WHERE token_hash=$1 AND expires_at>now()
+   RETURNING session_id)
+  SELECT r.*,s.id AS session_id,s.expires_at AS session_expires_at
+  FROM claimed t JOIN host_sessions s ON s.id=t.session_id
+  JOIN rooms r ON r.id=s.room_id
+  WHERE s.revoked_at IS NULL AND s.expires_at>now()`,[hmac('socket-ticket:'+ticket)])).rows[0]||null;
 }
 async function sessionRequest(req,res){
  sec(res);
@@ -221,7 +217,8 @@ async function sessionRequest(req,res){
     log('warning','session_login_rejected');res.writeHead(401);res.end('{"error":"denied"}');return;
    }
    const token=b64(32);
-   const session=(await c.query("INSERT INTO host_sessions(room_id,token_hash,expires_at) VALUES($1,$2,now()+interval '30 days') RETURNING id,expires_at",[room.id,hmac('browser-session:'+token)])).rows[0];
+   const session=(await c.query(`INSERT INTO host_sessions(room_id,token_hash,expires_at)
+    VALUES($1,$2,now()+interval '30 days') RETURNING id,expires_at`,[room.id,hmac('browser-session:'+token)])).rows[0];
    room={...room,session_id:session.id,session_expires_at:session.expires_at};
    res.setHeader('Set-Cookie',sessionCookie(req,token,30*24*60*60));
   }else{
@@ -229,13 +226,16 @@ async function sessionRequest(req,res){
    if(req.method==='DELETE'){
     if(room){
      await c.query('UPDATE host_sessions SET revoked_at=now() WHERE id=$1',[room.session_id]);
+     await c.query('DELETE FROM socket_tickets WHERE session_id=$1',[room.session_id]);
      for(const socket of wss.clients)if(socket.session===room.session_id)socket.close(4401,'logout');
     }
     res.setHeader('Set-Cookie',sessionCookie(req,'',0));res.end('{"ok":true}');return;
    }
    if(!room){res.writeHead(401);res.end('{"error":"session_expired"}');return}
   }
-  res.end(JSON.stringify({roomName:room.title,socketTicket:socketTicket(room.session_id)}));
+  const socketToken=b64(32);
+  await c.query("INSERT INTO socket_tickets(session_id,token_hash,expires_at) VALUES($1,$2,now()+interval '30 seconds')",[room.session_id,hmac('socket-ticket:'+socketToken)]);
+  res.end(JSON.stringify({roomName:room.title,socketTicket:socketToken}));
  }finally{c.release()}
 }
 const server=http.createServer(async(req,res)=>{const reqId=crypto.randomUUID();try{if(req.method==='GET'&&req.url.startsWith('/api/images/'))return await imageGet(req,res);const thumbRoute=/^\/api\/images\/([0-9a-f-]{36})\/thumbnail$/.exec(req.url);if(req.method==='POST'&&thumbRoute)return await imageThumb(req,res,thumbRoute[1],reqId);if(limited(ipBuckets,ip(req),120,60000)){sec(res);res.writeHead(429);return res.end('{"error":"rate_limited"}')}if(req.url==='/api/session')return await sessionRequest(req,res);if(req.method==='POST'&&req.url==='/api/images')return await imageUpload(req,res,reqId);if(req.method==='POST'&&req.url==='/api/quizzes')return await quizSave(req,res,reqId);if(req.method==='DELETE'&&req.url.startsWith('/api/quizzes/'))return await quizDelete(req,res,reqId);if(req.method==='POST'&&req.url==='/api/rooms'){if(!ORIGINS.includes(req.headers.origin)){sec(res);res.writeHead(403);return res.end('{"error":"origin_denied"}')}const b=await read(req),title=txt(b.roomName),secret=b.hostSecret;if(!title||typeof secret!=='string'||!((/^\d{8,16}$/.test(secret))||(secret.length>=12&&secret.length<=128))){sec(res);res.writeHead(400);return res.end('{"error":"invalid_input"}')}const client=ip(req);if(limited(roomBuckets,client,5,15*60e3)||limited(roomBuckets,'global',30,15*60e3)){sec(res);res.writeHead(429);return res.end('{"error":"rate_limited"}')}const slug=crypto.randomUUID(),token=b64(32),hostSecretHash=await passHash(secret),c=await db.connect();try{await c.query('BEGIN');const rr=(await c.query('INSERT INTO rooms(slug,title,login_name,host_secret_hash) VALUES($1,$2,lower($4),$3) RETURNING id',[slug,title,hostSecretHash,title])).rows[0];await c.query('INSERT INTO display_tokens(room_id,token_hash) VALUES($1,$2)',[rr.id,hmac(token)]);await audit(c,rr.id,null,'room_created','ok',reqId,req);await c.query('COMMIT');sec(res);res.writeHead(201);return res.end(JSON.stringify({roomId:slug,displayToken:token}))}catch(e){await c.query('ROLLBACK');throw e}finally{c.release()}}
@@ -247,7 +247,7 @@ async function auth(ws,m,req){
  try{
   let room,sid,raw;
   if(m.socketTicket!==undefined){
-    room=await ticketSession(c,m.socketTicket)||await savedSession(c,req);
+    room=await ticketSession(c,m.socketTicket);
     if(!room)throw Error('session_expired');
     sid=room.session_id;ws.sessionExpiresAt=new Date(room.session_expires_at).getTime();
   }else if(m.secret===undefined){
@@ -382,4 +382,4 @@ wss.on('connection',(ws,req)=>{
  });
  ws.on('error',e=>log('warning','ws_error',{reason:e.message}));
  ws.on('close',()=>clearTimeout(timer));
-});setInterval(async()=>{try{await db.query("DELETE FROM host_sessions WHERE expires_at<now() OR revoked_at IS NOT NULL AND revoked_at<now()-interval '7 days'");await db.query("DELETE FROM quiz_images i WHERE i.created_at<now()-interval '30 days' AND NOT EXISTS(SELECT 1 FROM quiz_questions q WHERE q.image_id=i.id) AND NOT EXISTS(SELECT 1 FROM game_questions g WHERE g.image_id=i.id)")}catch{}},3600000).unref();server.listen(PORT,()=>log('info','started',{port:PORT}));
+});setInterval(async()=>{try{await db.query("DELETE FROM host_sessions WHERE expires_at<now() OR revoked_at IS NOT NULL AND revoked_at<now()-interval '7 days'");await db.query("DELETE FROM socket_tickets WHERE expires_at<now()");await db.query("DELETE FROM quiz_images i WHERE i.created_at<now()-interval '30 days' AND NOT EXISTS(SELECT 1 FROM quiz_questions q WHERE q.image_id=i.id) AND NOT EXISTS(SELECT 1 FROM game_questions g WHERE g.image_id=i.id)")}catch{}},3600000).unref();server.listen(PORT,()=>log('info','started',{port:PORT}));
