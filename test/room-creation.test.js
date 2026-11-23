@@ -56,6 +56,13 @@ test('weak passwords explain which pattern to avoid',async()=>{
  assert.match($('#loginMessage').textContent,/cijferreeksen/);
 });
 
+test('room creation rate limits explain when the user can retry',async()=>{
+ const {$}=browser(async()=>({status:429,ok:false,json:async()=>({error:'rate_limited'})}));
+ await $('#create').onclick();
+ assert.match($('#loginMessage').textContent,/15 seconden/);
+ assert.match($('#loginMessage').textContent,/Aanmelden|meld je aan/);
+});
+
 test('creating a room automatically signs in with the chosen name and password',async()=>{
  let request;
  const {$,sockets,sessionRequests}=browser(async(_url,options)=>{

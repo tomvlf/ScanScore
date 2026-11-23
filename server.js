@@ -347,13 +347,13 @@ async function createRoom(req,res,reqId){
  let started=false;
  try{
   const attempts=(await c.query(`INSERT INTO login_attempts(key_hash,attempts,expires_at)
-   SELECT candidate,1,now()+interval '15 minutes' FROM unnest($1::bytea[]) AS hashes(candidate)
+    SELECT candidate,1,now()+interval '15 seconds' FROM unnest($1::bytea[]) AS hashes(candidate)
    ON CONFLICT(key_hash) DO UPDATE SET attempts=CASE WHEN login_attempts.expires_at<=now() THEN 1 ELSE login_attempts.attempts+1 END,
-    expires_at=CASE WHEN login_attempts.expires_at<=now() THEN now()+interval '15 minutes' ELSE login_attempts.expires_at END
+     expires_at=CASE WHEN login_attempts.expires_at<=now() THEN now()+interval '15 seconds' ELSE login_attempts.expires_at END
    RETURNING key_hash,attempts`,[keys])).rows;
   if(attempts.some(row=>(row.key_hash.equals(keys[0])?5:30)<row.attempts)){
    log('warning','room_creation_rate_limited',{client:hmac('room-create-log:'+ip(req)).toString('hex').slice(0,16)});
-   res.writeHead(429);res.end('{"error":"rate_limited"}');return;
+   res.setHeader('Retry-After','15');res.writeHead(429);res.end('{"error":"rate_limited"}');return;
   }
   const slug=crypto.randomUUID(),hostSecretHash=await passHash(secret,title);
   await c.query('BEGIN');started=true;

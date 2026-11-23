@@ -59,6 +59,7 @@
 - [ ] Test vaste punten, plaatsverdeling, dubbele-scanblokkering en undo.
 - [ ] Test het read-only scorescherm.
 - [ ] Controleer dat een display-ticket geen hostacties kan uitvoeren of hergebruikt kan worden.
+- [ ] Controleer dat de ruimtecreatielimiet na 15 seconden opnieuw toelaat.
 - [ ] Controleer dat WebSocket-login zonder een eenmalige ticket wordt geweigerd.
 - [ ] Test dat de negende loginpoging per client binnen 15 minuten wordt geblokkeerd.
 

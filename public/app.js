@@ -814,7 +814,11 @@ $('#create').onclick = async () => {
     }
     const data = await response.json();
     if (!response.ok) {
-      const message = data.error === 'invalid_input'
+      const message = response.status === 429
+        ? 'Te veel ruimtecreatiepogingen. Wacht 15 seconden of meld je aan als de ruimte al bestaat.'
+        : response.status === 403
+          ? 'Aanmelding geweigerd door de originbeveiliging. Controleer of je het juiste HTTPS-adres gebruikt.'
+        : data.error === 'invalid_input'
         ? 'Vul een ruimtenaam van maximaal 80 tekens en een wachtwoord of wachtzin van minstens 16 tekens in.'
         : data.error === 'weak_password'
           ? 'Kies een onvoorspelbare wachtzin: geen cijferreeksen, herhaling of de ruimtenaam. Gebruik minstens 16 tekens met letters en cijfers of symbolen.'
