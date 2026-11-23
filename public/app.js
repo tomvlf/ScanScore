@@ -8,6 +8,7 @@ const $$ = s => [...document.querySelectorAll(s)];
 let ws, state, scanner, pairScanner, lastScan = '', lastAt = 0, lastQuestionId;
 let cameraTask = Promise.resolve();
 let draftQuiz = null, quizSaving = false;
+let reconnectAttempt = 0, reconnectTimer;
 
 /* ---------- Small helpers ---------- */
 
@@ -756,6 +757,8 @@ async function connect(name = $('#roomName').value.trim(), password = $('#secret
       if (ws !== socket) return;
       const message = JSON.parse(event.data);
       if (message.type === 'auth.ok') {
+        reconnectAttempt = 0;
+        clearTimeout(reconnectTimer);
         state = message.state;
         $('#login').classList.add('hidden');
         $('#app').classList.remove('hidden');
@@ -810,16 +813,35 @@ async function connect(name = $('#roomName').value.trim(), password = $('#secret
       status(event.code === 4401 ? 'Aanmelding verlopen' : event.code === 4403 ? 'Aanmelding mislukt' : 'Offline');
       if (scanner || pairScanner) cameraAction(stopCameras).catch(error => feedback('error', 'Camera kon niet stoppen', cameraError(error)));
       if (event.code === 4403 || event.code === 4401) {
+        reconnectAttempt = 0;
+        clearTimeout(reconnectTimer);
         state = null;
         $('#login').classList.remove('hidden');
         $('#app').classList.add('hidden');
         $('#mobileNav').classList.add('hidden');
         $('#logout').classList.add('hidden');
         loginMessage(event.code === 4401 ? 'Je aanmelding is verlopen. Meld je opnieuw aan.' : 'Je aanmelding kon niet worden bevestigd. Probeer opnieuw.');
+      } else if (++reconnectAttempt <= 3) {
+        const delay = 1000 * reconnectAttempt;
+        status('Verbinding herstellen…');
+        reconnectTimer = setTimeout(async () => {
+          try {
+            const session = await roomSession.restore('host');
+            if (session) return await connect(undefined, undefined, session);
+            throw Error('Je aanmelding is verlopen. Meld je opnieuw aan.');
+          } catch (error) {
+            state = null;
+            $('#login').classList.remove('hidden');
+            $('#app').classList.add('hidden');
+            $('#mobileNav').classList.add('hidden');
+            $('#logout').classList.add('hidden');
+            loginMessage(error.message || 'Verbinding herstellen mislukt. Meld je opnieuw aan.');
+          }
+        }, delay);
       } else if (!state) {
-        loginMessage('Verbinding verbroken. Probeer opnieuw aan te melden.');
+        loginMessage('Verbinding herstellen mislukt. Meld je opnieuw aan.');
       } else {
-        toast('Verbinding verbroken. Vernieuw de pagina om de verbinding te herstellen.');
+        toast('Verbinding blijft weg. Vernieuw de pagina.');
       }
     };
   } catch (error) {
