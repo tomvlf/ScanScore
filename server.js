@@ -243,7 +243,8 @@ async function sessionRequest(req,res){
  let body,name,loginKeys;
  if(req.method==='POST'){
   body=await read(req);name=txt(body.roomName);
-  if(!name||!strongPassword(body.secret,name)){res.writeHead(400);res.end('{"error":"invalid_input"}');return}
+  if(!name){res.writeHead(400);res.end('{"error":"invalid_input"}');return}
+  if(!strongPassword(body.secret,name)){res.writeHead(400);res.end('{"error":"weak_password"}');return}
   if(limited(authBuckets,ip(req)+':'+name.toLowerCase(),8,15*60e3)){res.writeHead(429);res.end('{"error":"rate_limited"}');return}
   loginKeys=[hmac('login-client:'+ip(req)),hmac('login-room:'+name.toLowerCase())];
  }
@@ -340,7 +341,8 @@ async function createRoom(req,res,reqId){
  sec(res);
  if(!ORIGINS.includes(req.headers.origin)){res.writeHead(403);res.end('{"error":"origin_denied"}');return}
  const body=await read(req),title=txt(body.roomName),secret=body.hostSecret;
- if(!title||!strongPassword(secret,title)){res.writeHead(400);res.end('{"error":"invalid_input"}');return}
+ if(!title){res.writeHead(400);res.end('{"error":"invalid_input"}');return}
+ if(!strongPassword(secret,title)){res.writeHead(400);res.end('{"error":"weak_password"}');return}
  const keys=[hmac('room-create-client:'+ip(req)),hmac('room-create-global:all')],c=await db.connect();
  let started=false;
  try{

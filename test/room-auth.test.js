@@ -148,7 +148,9 @@ test('empty names and invalid passwords cannot create a room',async()=>{
   {roomName:'Family Quiz',hostSecret:'My Family Quiz password!'},
   {roomName:'Q'.repeat(81),hostSecret:'a long host password'}
  ]){
-  assert.equal((await app.create(body)).statusCode,400);
+  const response=await app.create(body);
+  assert.equal(response.statusCode,400);
+  if(body.roomName.trim()==='Quiz'||body.roomName==='Family Quiz')assert.equal(response.body.error,'weak_password');
  }
 });
 

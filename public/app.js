@@ -816,6 +816,8 @@ $('#create').onclick = async () => {
     if (!response.ok) {
       const message = data.error === 'invalid_input'
         ? 'Vul een ruimtenaam van maximaal 80 tekens en een wachtwoord of wachtzin van minstens 16 tekens in.'
+        : data.error === 'weak_password'
+          ? 'Kies een onvoorspelbare wachtzin: geen cijferreeksen, herhaling of de ruimtenaam. Gebruik minstens 16 tekens met letters en cijfers of symbolen.'
         : 'Ruimte kon niet worden aangemaakt. Probeer het later opnieuw.';
       loginMessage(message);
       toast(message);

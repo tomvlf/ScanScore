@@ -49,6 +49,13 @@ test('duplicate room name explains how to create a different room or sign in',as
  assert.equal(sockets.length,0);
 });
 
+test('weak passwords explain which pattern to avoid',async()=>{
+ const {$}=browser(async()=>({status:400,ok:false,json:async()=>({error:'weak_password'})}));
+ await $('#create').onclick();
+ assert.match($('#loginMessage').textContent,/onvoorspelbare wachtzin/);
+ assert.match($('#loginMessage').textContent,/cijferreeksen/);
+});
+
 test('creating a room automatically signs in with the chosen name and password',async()=>{
  let request;
  const {$,sockets,sessionRequests}=browser(async(_url,options)=>{
