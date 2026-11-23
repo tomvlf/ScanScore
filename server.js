@@ -408,7 +408,6 @@ async function auth(ws,m,req){
   const room=await ticketSession(c,m.socketTicket,m.role),sid=room?.session_id;
   if(!room)throw Error('session_expired');
   ws.sessionExpiresAt=new Date(room.session_expires_at).getTime();
-  ws.sessionExpiryTimer=setTimeout(()=>ws.close(4401,'authentication_expired'),Math.max(0,ws.sessionExpiresAt-Date.now()));
   ws.room=room;ws.role=m.role;ws.session=sid;ws.req=req;ws.roomSlug=room.slug;ws.authed=true;
   ws.send(JSON.stringify({type:'auth.ok',roomId:room.slug,state:await state(c,room.slug,undefined,m.role==='host')}));
  }finally{c.release()}
@@ -549,5 +548,5 @@ wss.on('connection',(ws,req)=>{
   });
  });
  ws.on('error',e=>log('warning','ws_error',{reason:e.message}));
- ws.on('close',()=>{clearTimeout(timer);clearTimeout(ws.sessionExpiryTimer)});
+ ws.on('close',()=>clearTimeout(timer));
 });setInterval(async()=>{try{await db.query("DELETE FROM host_sessions WHERE expires_at<now() OR revoked_at IS NOT NULL AND revoked_at<now()-interval '7 days'");await db.query("DELETE FROM socket_tickets WHERE expires_at<now()");await db.query("DELETE FROM login_attempts WHERE expires_at<now()");await db.query("DELETE FROM quiz_images i WHERE i.created_at<now()-interval '30 days' AND NOT EXISTS(SELECT 1 FROM quiz_questions q WHERE q.image_id=i.id) AND NOT EXISTS(SELECT 1 FROM game_questions g WHERE g.image_id=i.id)")}catch{}},3600000).unref();server.listen(PORT,()=>log('info','started',{port:PORT}));
