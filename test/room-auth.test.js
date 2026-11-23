@@ -89,7 +89,7 @@ test('generated room IDs and display tokens cannot authenticate a host',async()=
  await assert.rejects(app.authenticate({role:'host',roomName:'Family Quiz',secret:created.body.displayToken}),/denied/);
  const display=await app.authenticate({role:'display',roomId:created.body.roomId,secret:created.body.displayToken});
  assert.equal(display.socket.role,'display');
- await assert.rejects(app.authenticate({role:'host'},'scorescan_session='+display.message.sessionToken),/denied/);
+ await assert.rejects(app.authenticate({role:'host'},'scorescan_session='+display.message.sessionToken),/session_expired/);
 });
 
 test('empty names and invalid passwords cannot create a room',async()=>{
@@ -134,7 +134,7 @@ test('persistent cookie restores both screens and logout revokes future access',
  assert.equal(logout.statusCode,200);assert.match(logout.headers['set-cookie'],/Max-Age=0/);
  assert.ok(sockets.every(socket=>socket.closed===4401));
  assert.equal((await app.request('GET','/api/session',{}, {cookie})).statusCode,401);
- await assert.rejects(app.authenticate({role:'host'},cookie),/denied/);
+ await assert.rejects(app.authenticate({role:'host'},cookie),/session_expired/);
 });
 
 test('short-lived signed tickets authenticate sockets without a forwarded cookie',async()=>{
@@ -148,9 +148,9 @@ test('short-lived signed tickets authenticate sockets without a forwarded cookie
   assert.equal(auth.socket.role,role);
  }
  const tampered=login.body.socketTicket.slice(0,-1)+(login.body.socketTicket.endsWith('a')?'b':'a');
- await assert.rejects(app.authenticate({role:'host',socketTicket:tampered},''),/denied/);
+ await assert.rejects(app.authenticate({role:'host',socketTicket:tampered},''),/session_expired/);
  await app.request('DELETE','/api/session',{}, {cookie:login.headers['set-cookie']});
- await assert.rejects(app.authenticate({role:'host',socketTicket:login.body.socketTicket},''),/denied/);
+ await assert.rejects(app.authenticate({role:'host',socketTicket:login.body.socketTicket},''),/session_expired/);
 });
 
 test('missing, forged and expired sessions cannot restore access',async()=>{
@@ -159,11 +159,11 @@ test('missing, forged and expired sessions cannot restore access',async()=>{
  const login=await app.request('POST','/api/session',{roomName:'Family Quiz',secret:hostSecret}),cookie=login.headers['set-cookie'];
  for(const invalid of ['',`scorescan_session=${'a'.repeat(43)}`]){
   assert.equal((await app.request('GET','/api/session',{}, {cookie:invalid})).statusCode,401);
-  await assert.rejects(app.authenticate({role:'host'},invalid),/denied/);
+  await assert.rejects(app.authenticate({role:'host'},invalid),/session_expired/);
  }
  for(const session of app.sessions.values())session.expires_at=Date.now()-1;
  assert.equal((await app.request('GET','/api/session',{}, {cookie})).statusCode,401);
- await assert.rejects(app.authenticate({role:'display'},cookie),/denied/);
+ await assert.rejects(app.authenticate({role:'display'},cookie),/session_expired/);
 });
 
 test('session login rejects wrong passwords and cross-origin login or logout',async()=>{

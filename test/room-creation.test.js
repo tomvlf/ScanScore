@@ -57,7 +57,7 @@ test('creating a room automatically signs in with the chosen name and password',
  assert.deepEqual(request,{roomName:'Family Quiz',hostSecret:'a long host password'});
  assert.equal(sockets.length,1);
  const socket=sockets[0];socket.onopen();
- assert.deepEqual(socket.messages[0],{type:'auth',role:'host'});
+ assert.deepEqual(socket.messages[0],{type:'auth',role:'host',roomName:'Family Quiz',secret:'a long host password'});
  assert.deepEqual(JSON.parse(sessionRequests.find(r=>r.method==='POST').body),{roomName:'Family Quiz',secret:'a long host password'});
  assert.equal($('#secret').value,'');
  assert.ok(!$('#loginMessage').textContent.includes('test-display-token'));
@@ -72,7 +72,7 @@ test('returning hosts sign in with room name and password, never a generated tok
  await $('#loginForm').onsubmit({preventDefault(){}});
  sockets[0].onopen();
  assert.deepEqual(JSON.parse(sessionRequests.find(r=>r.method==='POST').body),{roomName:'Family Quiz',secret:'a long host password'});
- assert.deepEqual(sockets[0].messages[0],{type:'auth',role:'host'});
+ assert.deepEqual(sockets[0].messages[0],{type:'auth',role:'host',roomName:'Family Quiz',secret:'a long host password'});
  sockets[0].onclose({code:4403});
  assert.match($('#loginMessage').textContent,/aanmelding is verlopen/);
 });
@@ -85,14 +85,14 @@ test('hosts restore a saved session without requesting or sending a password',as
  assert.deepEqual(sessionRequests.map(r=>r.method),['GET']);
 });
 
-test('hosts use the short-lived ticket from login for websocket authentication',async()=>{
+test('hosts authenticate the new socket once with their submitted credentials',async()=>{
  const {$,sockets}=browser(()=>assert.fail('Unexpected fetch'),{
   sessionResponse:{roomName:'Family Quiz',socketTicket:'signed-ticket'}
  });
  $('#roomName').value='Family Quiz';$('#secret').value='a long host password';
  await $('#loginForm').onsubmit({preventDefault(){}});
  sockets[0].onopen();
- assert.deepEqual(sockets[0].messages,[{type:'auth',role:'host',socketTicket:'signed-ticket'}]);
+ assert.deepEqual(sockets[0].messages,[{type:'auth',role:'host',roomName:'Family Quiz',secret:'a long host password'}]);
 });
 
 test('incorrect login credentials stay on the form without opening a socket',async()=>{

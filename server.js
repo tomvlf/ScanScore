@@ -247,12 +247,12 @@ async function auth(ws,m,req){
  try{
   let room,sid,raw;
   if(m.socketTicket!==undefined){
-   room=await ticketSession(c,m.socketTicket);
-   if(!room)throw Error('denied');
-   sid=room.session_id;ws.sessionExpiresAt=new Date(room.session_expires_at).getTime();
+    room=await ticketSession(c,m.socketTicket)||await savedSession(c,req);
+    if(!room)throw Error('session_expired');
+    sid=room.session_id;ws.sessionExpiresAt=new Date(room.session_expires_at).getTime();
   }else if(m.secret===undefined){
    room=await savedSession(c,req);
-   if(!room)throw Error('denied');
+    if(!room)throw Error('session_expired');
    sid=room.session_id;ws.sessionExpiresAt=new Date(room.session_expires_at).getTime();
   }else{
    const name=txt(m.roomName),legacyDisplay=m.role==='display'&&!name&&validId(m.roomId);
@@ -373,7 +373,12 @@ wss.on('connection',(ws,req)=>{
     if(Date.now()>=ws.sessionExpiresAt)throw Error('session_expired');
     await act(ws,m);
    }
-  }).catch(e=>{log('warning','ws_rejected',{reason:e.message});ws.close(4403,'rejected')});
+  }).catch(e=>{
+   log('warning','ws_rejected',{reason:e.message});
+   if(e.message==='session_expired'||e.message==='denied')ws.close(4401,'authentication_expired');
+   else if(e.message==='auth'||e.message==='blocked')ws.close(4403,'authentication_rejected');
+   else ws.close(1011,'server_error');
+  });
  });
  ws.on('error',e=>log('warning','ws_error',{reason:e.message}));
  ws.on('close',()=>clearTimeout(timer));

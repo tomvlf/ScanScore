@@ -10,6 +10,12 @@ const roomSession={
   return session;
  },
  authentication(role){
+  if(this.pendingLogin){
+   const message={type:'auth',role,roomName:this.pendingLogin.roomName,secret:this.pendingLogin.secret};
+   this.pendingLogin=null;
+   this.socketTicket=null;
+   return message;
+  }
   const message={type:'auth',role};
   if(this.socketTicket){message.socketTicket=this.socketTicket;this.socketTicket=null;}
   return message;
@@ -17,10 +23,12 @@ const roomSession={
  async login(roomName,secret){
   const session=await this.request('POST',{roomName,secret});
   if(!session)throw Error('Ruimtenaam of wachtwoord is onjuist.');
+  this.pendingLogin={roomName,secret};
   return session;
  },
  restore(){return this.request('GET')},
  async logout(){
+  this.pendingLogin=null;
   this.socketTicket=null;
   await this.request('DELETE');
   location.href='/';

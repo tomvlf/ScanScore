@@ -80,19 +80,19 @@ test('scoreboard uses room credentials, clears the password and opens a read-onl
  assert.deepEqual(JSON.parse(app.requests.find(r=>r.method==='POST').body),{roomName:'Family Quiz',secret:'a long host password'});
  assert.equal($('#secret').value,'');
  app.sockets[0].onopen();
- assert.deepEqual(app.sockets[0].messages,[{type:'auth',role:'display'}]);
+ assert.deepEqual(app.sockets[0].messages,[{type:'auth',role:'display',roomName:'Family Quiz',secret:'a long host password'}]);
  app.sockets[0].onmessage({data:JSON.stringify({type:'auth.ok',state:{title:'Family Quiz',games:[],players:[],game:null,revision:1}})});
  assert.equal($('#auth').classList.contains('hidden'),true);
  assert.equal($('#board').classList.contains('hidden'),false);
  assert.equal($('#logout').classList.contains('hidden'),false);
 });
 
-test('scoreboard uses the short-lived ticket from login for websocket authentication',async()=>{
+test('scoreboard authenticates a new socket once with the submitted credentials',async()=>{
  const app=await scoreboard({sessionResponse:{roomName:'Family Quiz',socketTicket:'signed-ticket'}});
  app.$('#roomName').value='Family Quiz';app.$('#secret').value='a long host password';
  await app.$('#auth').onsubmit({preventDefault(){}});
  app.sockets[0].onopen();
- assert.deepEqual(app.sockets[0].messages,[{type:'auth',role:'display',socketTicket:'signed-ticket'}]);
+ assert.deepEqual(app.sockets[0].messages,[{type:'auth',role:'display',roomName:'Family Quiz',secret:'a long host password'}]);
 });
 
 test('scoreboard restores after reopening without a password and can log out',async()=>{
