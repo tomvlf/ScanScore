@@ -17,6 +17,7 @@ Geen eindige testsuite kan letterlijk iedere mogelijke invoer, browser, netwerks
 - Docker-secretkoppelingen;
 - quizopslag, vraagkoppelingen en sessie-snapshots;
 - quiz-API voor opslaan en starten met gesimuleerde database;
+- tweetalige vragen, taalkeuzes en automatische schema-upgrades;
 - afbeeldingsformaten, uploadroute en quiz-API;
 - health- en readinessroutes;
 - responsive en toegankelijke UI-elementen;

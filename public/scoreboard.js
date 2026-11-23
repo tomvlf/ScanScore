@@ -30,6 +30,7 @@ function render(next) {
   if (!questionView && scoreView !== $('#scoreView').value) $('#scoreView').value = scoreView;
   $('#board').classList.toggle('mode-question', questionView);
   $('#board').classList.toggle('mode-scores', !questionView);
+  document.body?.classList.toggle('display-question', questionView);
   $('.board-controls').classList.toggle('hidden', questionView);
 
   const current = game?.questions?.find(question => question.ordinal === game.question);
@@ -89,10 +90,22 @@ function renderQuestionStage(next, game, question) {
     }
   }
   if (hasQuestion) {
-    $('#stagePrompt').textContent = question.prompt || '';
+    const language = next.displayLanguage || 'primary';
+    const primary = question.prompt || '';
+    const alt = question.promptAlt || '';
+    let main = primary, sub = '';
+    if (language === 'secondary' && alt) main = alt;
+    else if (language === 'both' && alt) sub = alt;
+    if (!main) main = alt;
+    $('#stagePrompt').textContent = main;
+    $('#stagePromptAlt').textContent = sub;
+    $('#stagePromptAlt').classList.toggle('hidden', !sub);
+    stage.classList.toggle('has-alt', !!sub);
     $('#stageMeta').textContent = `${formatPoints(question.points)} punten`;
   } else {
     $('#stagePrompt').textContent = game ? 'Deze sessie heeft nog geen vraag om te tonen.' : 'Er is nog geen spel gestart.';
+    $('#stagePromptAlt').classList.add('hidden');
+    stage.classList.remove('has-alt');
     $('#stageMeta').textContent = '';
   }
   $('#stageFooter').textContent = game
@@ -141,6 +154,7 @@ async function connect(resume = false) {
       $('#auth').classList.remove('hidden');
       $('#board').classList.add('hidden');
       $('#logout').classList.add('hidden');
+      document.body?.classList.remove('display-question');
       state = null;
       $('#authMessage').classList.remove('hidden');
       $('#authMessage').textContent = event.code === 4401

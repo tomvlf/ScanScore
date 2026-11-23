@@ -3,7 +3,7 @@ const test=require('node:test'),assert=require('node:assert/strict'),fs=require(
 const source=fs.readFileSync('server.js','utf8');
 
 function application({production=false,trustProxyHops=0}={}){
- const rooms=new Map(),sessions=new Map(),tickets=new Map(),attempts=new Map();let handle;
+ const rooms=new Map(),sessions=new Map(),tickets=new Map(),attempts=new Map(),timeouts=[];let handle;
  const client={
   async query(sql,values=[]){
    if(sql.startsWith('INSERT INTO rooms')){
@@ -21,7 +21,8 @@ function application({production=false,trustProxyHops=0}={}){
    }
    if(sql.startsWith('INSERT INTO host_sessions')){
     const id='session-'+sessions.size;
-    sessions.set(id,{id,room_id:values[0],token_hash:values[1],role:values[2],expires_at:Date.now()+24*60*60e3});
+    const role=values.length===3?'host':values[2];
+    sessions.set(id,{id,room_id:values[0],token_hash:values[1],role,expires_at:Date.now()+values.at(-1)*1000});
     return {rows:[{id,expires_at:new Date(sessions.get(id).expires_at)}],rowCount:1};
    }
    if(sql.startsWith('INSERT INTO login_attempts')){
@@ -80,6 +81,8 @@ function application({production=false,trustProxyHops=0}={}){
   },
   __dirname:process.cwd(),Buffer,
   process:{env:{DATABASE_URL:'postgresql://test.invalid/test',SECRET_PEPPER:'test-only-pepper',QR_ENCRYPTION_KEY:Buffer.alloc(32).toString('base64'),NODE_ENV:production?'production':'test',TRUST_PROXY_HOPS:String(trustProxyHops)},stdout:{write(){}}},
+  setTimeout(callback,delay){timeouts.push({callback,delay});return timeouts.length},
+  clearTimeout(){},
   setInterval(){return {unref(){}}}
  });
  vm.runInContext(source,context);
@@ -87,6 +90,7 @@ function application({production=false,trustProxyHops=0}={}){
   sessions,
   tickets,
   attempts,
+  timeouts,
   async request(method,url,body,headers={}){
    const request=new EventEmitter();Object.assign(request,{method,url,headers:{origin:'http://localhost:8080',...headers},socket:{remoteAddress:'test-client'}});
    const response={statusCode:200,headers:{},setHeader(name,value){this.headers[name.toLowerCase()]=value},writeHead(status){this.statusCode=status},end(body){this.body=JSON.parse(body)}};
@@ -189,6 +193,7 @@ test('persistent cookie restores both screens and logout revokes future access',
   const auth=await app.authenticate({role,socketTicket:ticketed.body.socketTicket});
   sockets.push(auth.socket);
   assert.equal(auth.socket.authed,true);assert.equal(auth.socket.role,role);
+  assert.ok(app.timeouts.at(-1).delay>86399000&&app.timeouts.at(-1).delay<=86400000);
   assert.ok(!('sessionToken' in auth.message));
  }
  const logout=await app.request('DELETE','/api/session',{}, {cookie});

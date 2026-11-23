@@ -117,6 +117,13 @@ $$('[data-display-mode]').forEach(button => {
   };
 });
 
+$$('[data-display-language]').forEach(button => {
+  button.onclick = () => {
+    if (!state || state.displayLanguage === button.dataset.displayLanguage) return;
+    send({ type: 'display.language', language: button.dataset.displayLanguage });
+  };
+});
+
 /* ---------- Game helpers ---------- */
 
 function currentQuestion() {
@@ -178,9 +185,25 @@ function render() {
     button.classList.toggle('active', active);
     button.setAttribute?.('aria-pressed', active ? 'true' : 'false');
   });
+  const languagePrimary = game?.languagePrimary || 'Nederlands';
+  const languageSecondary = game?.languageSecondary || 'English';
+  const hasAlt = !!(game?.questions || []).some(question => question.promptAlt);
+  const displayLanguage = ['primary', 'secondary', 'both'].includes(state.displayLanguage) ? state.displayLanguage : 'primary';
+  const effectiveLanguage = hasAlt ? displayLanguage : 'primary';
+  $('#displayLanguageGroup').classList.toggle('hidden', !hasAlt);
+  for (const [id, label] of [['displayLanguagePrimary', languagePrimary], ['displayLanguageSecondary', languageSecondary]]) {
+    $('#' + id).textContent = label;
+    $('#' + id).title = label;
+  }
+  $$('[data-display-language]').forEach(button => {
+    const active = button.dataset.displayLanguage === effectiveLanguage;
+    button.classList.toggle('active', active);
+    button.setAttribute?.('aria-pressed', active ? 'true' : 'false');
+  });
+  const languageLabel = effectiveLanguage === 'both' ? 'beide talen' : effectiveLanguage === 'secondary' ? languageSecondary : languagePrimary;
   $('#displaySwitchNote').textContent = displayMode === 'question'
-    ? 'Het grote scherm toont de actieve vraag met afbeelding.'
-    : 'Het grote scherm toont het klassement.';
+    ? `Het grote scherm toont de actieve vraag met afbeelding · ${languageLabel}.`
+    : `Het grote scherm toont het klassement · ${languageLabel}.`;
   $('#playTitle').textContent = game ? `${editable ? '' : 'Gestopt spel · '}Vraag ${game.question}` : 'Nog geen spel';
   const quizPrefix = game?.quizTitle ? `Quiz “${game.quizTitle}” · ` : '';
   $('#gameStatus').textContent = game
@@ -328,7 +351,7 @@ function renderQuizList() {
         const updated = quiz.updatedAt ? new Date(quiz.updatedAt).toLocaleDateString('nl-BE', { day: '2-digit', month: 'short' }) : '';
         return `<article class="quiz-card">
           <div class="quiz-card-head">
-            <div><h2>${esc(quiz.title)}</h2><p class="quiz-card-meta">${questions.length} ${questions.length === 1 ? 'vraag' : 'vragen'} · ${formatPoints(total)} punten${updated ? ` · ${esc(updated)}` : ''}</p></div>
+            <div><h2>${esc(quiz.title)}</h2><p class="quiz-card-meta">${questions.length} ${questions.length === 1 ? 'vraag' : 'vragen'} · ${formatPoints(total)} punten · ${esc(quiz.languagePrimary || 'Nederlands')} + ${esc(quiz.languageSecondary || 'English')}${updated ? ` · ${esc(updated)}` : ''}</p></div>
             <div class="quiz-card-tools"><button class="icon-button danger" type="button" data-delete-quiz="${quiz.id}" aria-label="${esc(quiz.title)} verwijderen" title="Quiz verwijderen">${icon('trash')}</button></div>
           </div>
           <div class="quiz-thumbs">${thumbs}${extra}</div>
@@ -342,11 +365,11 @@ function renderQuizList() {
 }
 
 function blankQuizQuestion(points = 50) {
-  return { prompt: '', points, imageId: null, imageUrl: null };
+  return { prompt: '', promptAlt: '', points, imageId: null, imageUrl: null };
 }
 
 function newQuizEditor() {
-  draftQuiz = { id: null, title: '', questions: [blankQuizQuestion()] };
+  draftQuiz = { id: null, title: '', languagePrimary: 'Nederlands', languageSecondary: 'English', questions: [blankQuizQuestion()] };
   showQuizEditor();
 }
 
@@ -359,8 +382,11 @@ function openQuizEditor(id) {
   draftQuiz = {
     id: quiz.id,
     title: quiz.title,
+    languagePrimary: quiz.languagePrimary || 'Nederlands',
+    languageSecondary: quiz.languageSecondary || 'English',
     questions: quiz.questions.map(question => ({
       prompt: question.prompt,
+      promptAlt: question.promptAlt || '',
       points: question.points,
       imageId: question.imageId,
       imageUrl: question.imageUrl || (question.imageId ? `/api/images/${question.imageId}` : null),
@@ -373,8 +399,10 @@ function openQuizEditor(id) {
 function showQuizEditor() {
   if (!draftQuiz) return;
   $('#quizTitleInput').value = draftQuiz.title;
+  $('#quizLanguagePrimary').value = draftQuiz.languagePrimary;
+  $('#quizLanguageSecondary').value = draftQuiz.languageSecondary;
   $('#quizEditorTitle').textContent = draftQuiz.id ? 'Quiz bewerken' : 'Nieuwe quiz';
-  $('#quizStatus').textContent = 'Elke vraag heeft een tekst, afbeelding en puntenwaarde nodig.';
+  $('#quizStatus').textContent = 'Elke vraag heeft een tekst in de eerste taal, een afbeelding en punten nodig; de tweede taal is optioneel.';
   $('#quizEditor').classList.remove('hidden');
   $('#quizList').classList.add('hidden');
   $('#newQuiz').classList.add('hidden');
@@ -403,7 +431,8 @@ function renderQuizEditor() {
         <input type="file" accept="image/jpeg,image/png,image/webp" data-image-input="${index}" aria-label="Afbeelding voor vraag ${index + 1} kiezen">
       </label>
       <div class="editor-fields">
-        <label class="field"><span>Vraag</span><textarea data-prompt="${index}" maxlength="500" placeholder="Bijv. Welke film won de Oscar voor beste film in 2024?">${esc(question.prompt)}</textarea></label>
+        <label class="field"><span>Vraag (${esc(draftQuiz.languagePrimary || 'hoofdtaal')})</span><textarea data-prompt="${index}" maxlength="500" placeholder="Bijv. Welke film won de Oscar voor beste film in 2024?">${esc(question.prompt)}</textarea></label>
+        <label class="field"><span>Vraag (${esc(draftQuiz.languageSecondary || 'tweede taal')}, optioneel)</span><textarea data-prompt-alt="${index}" maxlength="500" placeholder="Optional translation">${esc(question.promptAlt || '')}</textarea></label>
       </div>
       <div class="editor-side">
         <label class="field"><span>Punten</span><input data-points="${index}" type="number" min="1" max="1000000" step="1" value="${question.points}"></label>
@@ -420,11 +449,14 @@ function renderQuizEditor() {
 function readQuizInputs() {
   if (!draftQuiz) return;
   draftQuiz.title = $('#quizTitleInput').value.trim();
+  draftQuiz.languagePrimary = $('#quizLanguagePrimary').value.trim();
+  draftQuiz.languageSecondary = $('#quizLanguageSecondary').value.trim();
   for (const row of document.querySelectorAll('[data-question-row]')) {
     const index = Number(row.dataset.questionRow);
     const question = draftQuiz.questions[index];
     if (!question) continue;
     question.prompt = row.querySelector('[data-prompt]').value;
+    question.promptAlt = row.querySelector('[data-prompt-alt]').value;
     question.points = Number(row.querySelector('[data-points]').value);
   }
 }
@@ -435,6 +467,11 @@ async function saveQuiz() {
   if (!draftQuiz.title) {
     $('#quizStatus').textContent = 'Geef de quiz eerst een titel.';
     $('#quizTitleInput').focus();
+    return;
+  }
+  if (!draftQuiz.languagePrimary || !draftQuiz.languageSecondary || draftQuiz.languagePrimary.length > 40 || draftQuiz.languageSecondary.length > 40) {
+    $('#quizStatus').textContent = 'Geef beide talen een naam van maximaal 40 tekens.';
+    $('#quizLanguagePrimary').focus();
     return;
   }
   if (!draftQuiz.questions.length) {
@@ -466,8 +503,11 @@ async function saveQuiz() {
   try {
     const body = {
       title: draftQuiz.title,
+      languagePrimary: draftQuiz.languagePrimary,
+      languageSecondary: draftQuiz.languageSecondary,
       questions: draftQuiz.questions.map(question => ({
         prompt: question.prompt.trim(),
+        promptAlt: question.promptAlt.trim() || null,
         points: question.points,
         imageId: question.imageId
       }))
@@ -636,6 +676,7 @@ $('#quizQuestions').oninput = event => {
   const question = draftQuiz.questions[Number(row.dataset.questionRow)];
   if (!question) return;
   if (event.target.matches('[data-prompt]')) question.prompt = event.target.value;
+  if (event.target.matches('[data-prompt-alt]')) question.promptAlt = event.target.value;
   if (event.target.matches('[data-points]')) question.points = Number(event.target.value);
 };
 $('#quizQuestions').onchange = event => {

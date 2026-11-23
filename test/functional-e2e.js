@@ -85,11 +85,11 @@ function close(...clients){for(const c of clients)c?.close()}
  r=await fetch(APP+'/api/images',{method:'POST',headers:{origin:ORIGIN,'content-type':'image/png',cookie},body:Buffer.from('not an image')});assert.equal(r.status,415);
  r=await fetch(APP+'/api/images',{method:'POST',headers:{origin:ORIGIN,'content-type':'image/png',cookie},body:png});assert.equal(r.status,201);const image=await r.json();assert.ok(image.id);
  const quizTitle=`E2E Quiz ${crypto.randomBytes(4).toString('hex')}`;
- r=await fetch(APP+'/api/quizzes',{method:'POST',headers:{origin:ORIGIN,'content-type':'application/json',cookie},body:JSON.stringify({title:quizTitle,questions:[{prompt:'Eerste vraag?',points:25,imageId:image.id},{prompt:'Tweede vraag?',points:75,imageId:image.id}]})});
+ r=await fetch(APP+'/api/quizzes',{method:'POST',headers:{origin:ORIGIN,'content-type':'application/json',cookie},body:JSON.stringify({title:quizTitle,languagePrimary:'Nederlands',languageSecondary:'English',questions:[{prompt:'Eerste vraag?',promptAlt:'First question?',points:25,imageId:image.id},{prompt:'Tweede vraag?',promptAlt:'Second question?',points:75,imageId:image.id}]})});
  assert.equal(r.status,201);const quiz=await r.json();assert.ok(quiz.quizId);
  const quizList=await host.next(x=>x.type==='state'&&x.state.quizzes?.some(q=>q.id===quiz.quizId));assert.equal(quizList.state.quizzes[0].questions.length,2);
  const quizGame=await stateAfter(host,'game.start',{quizId:quiz.quizId});const quizGameId=quizGame.state.activeGameId,quizQ1=quizGame.state.game.questions[0],quizQ2=quizGame.state.game.questions[1];
- assert.equal(quizGame.state.game.quizTitle,quizTitle);assert.equal(quizGame.state.game.questionCount,2);assert.equal(quizQ1.prompt,'Eerste vraag?');assert.equal(quizQ1.points,25);assert.ok(quizQ1.imageId);assert.equal(quizQ2.points,75);
+ assert.equal(quizGame.state.game.quizTitle,quizTitle);assert.equal(quizGame.state.game.questionCount,2);assert.equal(quizGame.state.game.languagePrimary,'Nederlands');assert.equal(quizGame.state.game.languageSecondary,'English');assert.equal(quizQ1.prompt,'Eerste vraag?');assert.equal(quizQ1.promptAlt,'First question?');assert.equal(quizQ1.points,25);assert.ok(quizQ1.imageId);assert.equal(quizQ2.points,75);
  result=await scan(host,'qr-alice',crypto.randomUUID(),quizGameId,quizQ1.id);assert.equal(result.ok,true);assert.equal(result.points,25);
  st=await host.next(x=>x.type==='state');assert.equal(score(st.state,'Alice'),25);
  const quizNext=await stateAfter(host,'question.next',{gameId:quizGameId,questionId:quizQ1.id});assert.equal(quizNext.state.game.question,2);
@@ -104,6 +104,10 @@ function close(...clients){for(const c of clients)c?.close()}
  r=await fetch(APP+'/api/quizzes/'+quiz.quizId,{method:'DELETE',headers:{origin:ORIGIN,cookie}});assert.equal(r.status,200);
  const quizGone=await host.next(x=>x.type==='state'&&!(x.state.quizzes||[]).some(q=>q.id===quiz.quizId));assert.equal(quizGone.state.quizzes.length,0);
  const display=new Client('display',hostSecret),displayAuth=await display.open();assert.equal(displayAuth.state.players.length,4);assert.ok(!('quizzes' in displayAuth.state));
+ await stateAfter(host,'display.language',{language:'both'});
+ const displayBoth=await display.next(x=>x.type==='state'&&x.state.displayLanguage==='both');assert.equal(displayBoth.state.displayLanguage,'both');assert.ok(displayBoth.state.game.questions.find(q=>q.ordinal===displayBoth.state.game.question)?.promptAlt);
+ await stateAfter(host,'display.language',{language:'primary'});
+ const displayPrimary=await display.next(x=>x.type==='state'&&x.state.displayLanguage==='primary');assert.equal(displayPrimary.state.displayLanguage,'primary');
  await stateAfter(host,'display.mode',{mode:'question'});
  const displayQuestion=await display.next(x=>x.type==='state'&&x.state.displayMode==='question');
  assert.equal(displayQuestion.state.displayMode,'question');

@@ -2,6 +2,7 @@ import json,sys
 cfg=json.load(sys.stdin); services=cfg['services']
 expected={
 'db':{'POSTGRES_PASSWORD','DB_RUNTIME_PASSWORD'},
+'schema-upgrade':{'PGPASSWORD'},
 'app':{'DATABASE_URL','SECRET_PEPPER','QR_ENCRYPTION_KEY'},
 'privilege-test':{'DATABASE_URL'},
 'functional-test':set()}

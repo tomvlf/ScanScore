@@ -9,6 +9,7 @@ CREATE TABLE rooms(
  slug varchar(40) NOT NULL UNIQUE CHECK(slug ~ '^[a-z0-9][a-z0-9_-]{2,39}$'),
  title varchar(80) NOT NULL CHECK(length(btrim(title)) BETWEEN 1 AND 80),
  display_mode varchar(10) NOT NULL DEFAULT 'scores' CHECK(display_mode IN ('scores','question')),
+ display_language varchar(10) NOT NULL DEFAULT 'primary' CHECK(display_language IN ('primary','secondary','both')),
  login_name varchar(80) NOT NULL UNIQUE
   CHECK(length(login_name) BETWEEN 1 AND 80 AND login_name=lower(btrim(login_name))),
  host_secret_hash text NOT NULL,
@@ -122,6 +123,8 @@ CREATE TABLE quizzes(
  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
  room_id uuid NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
  title varchar(120) NOT NULL CHECK(length(btrim(title)) BETWEEN 1 AND 120),
+ language_primary varchar(40) NOT NULL DEFAULT 'Nederlands',
+ language_secondary varchar(40) NOT NULL DEFAULT 'English',
  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
  updated_at timestamptz NOT NULL DEFAULT clock_timestamp()
 );
@@ -132,6 +135,7 @@ CREATE TABLE quiz_questions(
  quiz_id uuid NOT NULL REFERENCES quizzes(id) ON DELETE CASCADE,
  ordinal integer NOT NULL CHECK(ordinal BETWEEN 1 AND 10000),
  prompt varchar(500) NOT NULL CHECK(length(btrim(prompt)) BETWEEN 1 AND 500),
+ prompt_alt varchar(500) CHECK(prompt_alt IS NULL OR length(btrim(prompt_alt)) BETWEEN 1 AND 500),
  points integer NOT NULL CHECK(points BETWEEN 1 AND 1000000),
  image_id uuid NOT NULL REFERENCES quiz_images(id) ON DELETE RESTRICT,
  UNIQUE(quiz_id,ordinal)
@@ -147,6 +151,8 @@ CREATE TABLE games(
  ended_at timestamptz,
  quiz_id uuid REFERENCES quizzes(id) ON DELETE SET NULL,
  quiz_title varchar(120),
+ language_primary varchar(40),
+ language_secondary varchar(40),
  question_count integer CHECK(question_count BETWEEN 1 AND 10000),
  CHECK((legacy AND ended_at IS NOT NULL) OR (NOT legacy AND points_per_question IS NOT NULL))
 );
@@ -161,6 +167,7 @@ CREATE TABLE game_questions(
  points integer CHECK(points BETWEEN 1 AND 1000000),
  label varchar(100),
  prompt varchar(500),
+ prompt_alt varchar(500),
  image_id uuid REFERENCES quiz_images(id) ON DELETE RESTRICT,
  UNIQUE(game_id,ordinal)
 );

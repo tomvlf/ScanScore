@@ -10,15 +10,15 @@ test('game model preserves legacy events and enforces a single active game and u
 });
 test('runtime role is least privileged',()=>{for(const x of ['GRANT SELECT,INSERT,UPDATE,DELETE','REVOKE ALL ON ALL TABLES','GRANT USAGE,SELECT ON SEQUENCE'])has(schema,x);assert.ok(!/GRANT ALL/i.test(schema))});
 test('websocket and browser security controls are present',()=>{for(const x of ['maxPayload:16384','perMessageDeflate:false','Content-Security-Policy','X-Content-Type-Options','Strict-Transport-Security','ORIGINS.includes','timingSafeEqual'])has(server,x)});
-test('operations and environment variable isolation are wired',()=>{for(const x of ['DATABASE_URL','SECRET_PEPPER','QR_ENCRYPTION_KEY','/healthz','/readyz'])has(server,x);for(const x of ['RUNTIME_DATABASE_URL','privilege-test','internal: true','pgdata_v2'])has(compose,x);assert.ok(!compose.includes('migrate:'));assert.ok(!compose.includes('/run/secrets/'))});
+test('operations and environment variable isolation are wired',()=>{for(const x of ['DATABASE_URL','SECRET_PEPPER','QR_ENCRYPTION_KEY','/healthz','/readyz'])has(server,x);for(const x of ['RUNTIME_DATABASE_URL','privilege-test','internal: true','pgdata_v2','schema-upgrade','schema-upgrades'])has(compose,x);assert.ok(!compose.includes('migrate:'));assert.ok(!compose.includes('/run/secrets/'))});
 test('responsive and accessible UI affordances exist',()=>{for(const x of ['aria-live','class="mobile','class="skip','id="feedback"'])has(html,x);for(const x of ['prefers-reduced-motion','prefers-color-scheme','focus-visible','@media(max-width:650px)'])has(css,x)});
 test('quiz builder, image uploads and public question view are wired',()=>{
  for(const x of ["'/api/images'","'/api/quizzes'",'quiz_images','quiz_questions','question_count','quiz_finished'])has(server,x);
- for(const id of ['quizzes','quizEditor','quizSelect','currentQuestion','newQuiz','saveQuiz','addQuestion','quizList','quizTitleInput','displaySwitch','displaySwitchNote'])has(html,`id="${id}"`);
- for(const x of ['data-display-mode="scores"','data-display-mode="question"'])has(html,x);
- for(const x of ['id="questionStage"','id="stageImage"','id="stagePrompt"'])has(board,x);
- for(const x of ['quiz-card','question-stage','image-drop','display-switch'])has(css,x);
- for(const x of ["m.type==='display.mode'",'display_mode','displayMode'])has(server,x);
+ for(const id of ['quizzes','quizEditor','quizSelect','currentQuestion','newQuiz','saveQuiz','addQuestion','quizList','quizTitleInput','quizLanguagePrimary','quizLanguageSecondary','displaySwitch','displaySwitchNote','displayLanguageGroup'])has(html,`id="${id}"`);
+ for(const x of ['data-display-mode="scores"','data-display-mode="question"','data-display-language="primary"','data-display-language="secondary"','data-display-language="both"'])has(html,x);
+ for(const x of ['id="questionStage"','id="stageImage"','id="stagePrompt"','id="stagePromptAlt"'])has(board,x);
+ for(const x of ['quiz-card','question-stage','image-drop','display-switch','stage-prompt-alt'])has(css,x);
+ for(const x of ["m.type==='display.mode'","m.type==='display.language'",'display_mode','display_language','displayMode','displayLanguage','prompt_alt','language_primary'])has(server,x);
 });
 test('feature matrix is non-empty and categorized',()=>{const m=JSON.parse(fs.readFileSync('test/feature-matrix.json'));assert.ok(Object.keys(m).length>=8);for(const [k,v] of Object.entries(m))assert.ok(v.length>0,`${k} empty`)});
 test('presentation surfaces expose podium, confirmation and display tools',()=>{

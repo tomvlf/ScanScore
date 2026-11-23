@@ -1457,20 +1457,22 @@ main {
 
 .displaybody header {
   position: relative;
-  height: 72px;
+  height: 52px;
   background: transparent;
   border-bottom: 1px solid rgba(255, 255, 255, .07);
   backdrop-filter: none;
-  padding: 0 clamp(16px, 4vw, 54px);
+  padding: 0 clamp(14px, 3vw, 38px);
 }
-.displaybody .brand-mark { background: linear-gradient(140deg, #7a64ff, #b06bff); }
-.displaybody .brand-copy strong { color: #fff; }
-.displaybody .brand-copy small { color: #9d98c0; }
-.displaybody .status { background: rgba(255, 255, 255, .05); border-color: rgba(255, 255, 255, .1); color: #b6b3cf; }
+.displaybody .brand { gap: .55rem; }
+.displaybody .brand-mark { width: 32px; height: 32px; border-radius: 10px; font-size: .9rem; background: linear-gradient(140deg, #7a64ff, #b06bff); }
+.displaybody .brand-copy strong { color: #fff; font-size: .9rem; }
+.displaybody .brand-copy small { display: none; }
+.displaybody .status { min-height: 30px; padding: .2rem .55rem; font-size: .68rem; background: rgba(255, 255, 255, .05); border-color: rgba(255, 255, 255, .1); color: #b6b3cf; }
 .displaybody .status.online { background: rgba(67, 217, 155, .1); border-color: rgba(67, 217, 155, .2); color: #7de2b8; }
-.displaybody .ghost { color: #a5a1c2; }
+.displaybody .ghost { min-height: 34px; padding: .28rem .55rem; font-size: .74rem; color: #a5a1c2; }
 .displaybody .ghost:hover { background: rgba(255, 255, 255, .06); color: #fff; }
-.displaybody .header-actions { gap: .55rem; }
+.displaybody .header-actions { gap: .35rem; }
+.displaybody .fullscreen-label { display: none; }
 
 .display-main { width: 100%; max-width: 1520px; margin: 0 auto; padding: clamp(18px, 3vw, 40px) clamp(16px, 4vw, 54px) 60px; }
 
@@ -1696,6 +1698,7 @@ main {
 .display-switch-copy .icon-tile .icon { width: 18px; height: 18px; }
 .display-switch-copy strong { display: block; font-size: .8rem; letter-spacing: -.01em; }
 .display-switch-copy small { display: block; color: var(--muted); font-size: .72rem; line-height: 1.35; }
+.display-switch-groups { display: flex; align-items: center; justify-content: flex-end; gap: .45rem; flex-wrap: wrap; }
 .segmented {
   display: flex;
   gap: 3px;
@@ -1716,6 +1719,9 @@ main {
   font-size: .75rem;
   font-weight: 800;
   white-space: nowrap;
+  max-width: 22ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .segmented button .icon { width: 15px; height: 15px; }
 .segmented button:hover:not(:disabled) { background: var(--surface); color: var(--ink); transform: none; }
@@ -1756,6 +1762,7 @@ main {
 .quiz-editor-head > div { flex: 1; min-width: 180px; }
 .quiz-editor-head h2 { margin: .1rem 0 0; font-size: 1.25rem; letter-spacing: -.03em; }
 .quiz-title-field { max-width: 560px; margin-top: 1.1rem; }
+.quiz-languages { display: grid; grid-template-columns: 1fr 1fr; gap: .7rem; width: min(100%, 560px); margin-top: .1rem; }
 .question-editor { display: grid; gap: 14px; margin-top: 1.2rem; }
 
 .editor-question {
@@ -1881,7 +1888,8 @@ main {
 .question-stage.empty h2 { max-width: 34ch; font-size: clamp(1.2rem, 2.4vw, 2rem); color: #c9c4e2; }
 
 /* Question mode uses the full stage: the question and image are the content. */
-.board.mode-question { gap: 0; height: calc(100svh - 140px); min-height: 0; }
+.displaybody.display-question .display-main { padding-top: clamp(8px, 1.2vw, 14px); padding-bottom: 8px; }
+.board.mode-question { gap: 0; height: calc(100svh - 72px); min-height: 0; }
 .board.mode-question .board-head,
 .board.mode-question .board-controls,
 .board.mode-question .board-footer { display: none; }
@@ -1896,7 +1904,9 @@ main {
   gap: clamp(.65rem, 1.3vw, 1.15rem);
   text-align: center;
 }
+.board.mode-question .question-stage.has-alt { grid-template-rows: auto minmax(0, 1fr) auto auto auto; }
 .board.mode-question .question-stage.no-media { grid-template-rows: auto minmax(0, 1fr) auto; }
+.board.mode-question .question-stage.no-media.has-alt { grid-template-rows: auto minmax(0, 1fr) auto auto; }
 .board.mode-question .question-stage.no-media .stage-media { display: none; }
 .stage-top {
   display: flex;
@@ -1952,6 +1962,14 @@ main {
   font-weight: 750;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+}
+.stage-prompt-alt {
+  max-width: 46ch;
+  margin: 0;
+  color: #c9c4e2;
+  font-size: clamp(1rem, 2.2vw, 2rem);
+  line-height: 1.2;
+  letter-spacing: -.025em;
 }
 .stage-footer {
   margin: 0;
@@ -2060,8 +2078,13 @@ main {
   .displaybody #fullscreen { min-width: 38px; padding: .3rem .45rem; }
 
   .display-switch { align-items: stretch; flex-direction: column; gap: .55rem; padding: .7rem; }
+  .display-switch-groups { flex-direction: column; align-items: stretch; gap: .4rem; }
   .display-switch .segmented { width: 100%; }
   .display-switch .segmented button { flex: 1; justify-content: center; }
+  .quiz-languages { grid-template-columns: 1fr; }
+  .board.mode-question .question-stage h2,
+  .stage-prompt-alt { max-width: 30ch; }
+  .stage-prompt-alt { font-size: clamp(.9rem, 4.2vw, 1.4rem); }
   .question-card { grid-template-columns: 1fr; gap: 12px; padding: 14px; }
   .question-card-media { max-height: 180px; }
   .question-card-copy h2 { font-size: 1.1rem; }
@@ -2077,7 +2100,6 @@ main {
   .editor-question-actions { justify-content: flex-end; }
   .quiz-editor-foot { align-items: flex-start; flex-direction: column; }
   .stage-media, .stage-media img { max-height: 40vh; }
-  .board.mode-question { height: calc(100svh - 92px); min-height: 0; }
   .board.mode-question .question-stage { height: 100%; min-height: 0; }
   .board.mode-question .question-stage h2 { font-size: clamp(1.45rem, 6.4vw, 2.2rem); }
   .board.mode-question .stage-media { border-radius: 16px; }
@@ -2162,9 +2184,11 @@ main {
   .toast { bottom: calc(150px + env(safe-area-inset-bottom)); }
   body:not(:has(#play.is-playing.active)) .toast { bottom: calc(84px + env(safe-area-inset-bottom)); }
 
-  .displaybody header { height: 60px; padding: 0 14px; }
+  .displaybody header { height: 50px; padding: 0 12px; }
   .displaybody .brand-copy small { display: none; }
   .display-main { padding: 16px 12px 90px; }
+  .displaybody.display-question .display-main { padding: 10px 10px 6px; }
+  .board.mode-question { height: calc(100svh - 66px); }
   .board-title h1 { font-size: clamp(2rem, 12vw, 3.2rem); }
   .board-controls { flex-direction: column; align-items: stretch; }
   .board-controls label { width: 100%; }

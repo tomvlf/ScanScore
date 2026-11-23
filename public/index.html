@@ -142,9 +142,16 @@
         <span class="icon-tile"><svg class="icon" aria-hidden="true"><use href="#i-tv"/></svg></span>
         <div><strong>Publiek scherm</strong><small id="displaySwitchNote">Het grote scherm toont het klassement.</small></div>
       </div>
-      <div class="segmented" role="group" aria-label="Weergave op het publieke scherm">
-        <button type="button" data-display-mode="scores"><svg class="icon" aria-hidden="true"><use href="#i-trophy"/></svg>Klassement</button>
-        <button type="button" data-display-mode="question"><svg class="icon" aria-hidden="true"><use href="#i-image"/></svg>Vraag + beeld</button>
+      <div class="display-switch-groups">
+        <div class="segmented" role="group" aria-label="Weergave op het publieke scherm">
+          <button type="button" data-display-mode="scores"><svg class="icon" aria-hidden="true"><use href="#i-trophy"/></svg>Klassement</button>
+          <button type="button" data-display-mode="question"><svg class="icon" aria-hidden="true"><use href="#i-image"/></svg>Vraag + beeld</button>
+        </div>
+        <div id="displayLanguageGroup" class="segmented hidden" role="group" aria-label="Taal op het publieke scherm">
+          <button type="button" data-display-language="primary" id="displayLanguagePrimary">Nederlands</button>
+          <button type="button" data-display-language="secondary" id="displayLanguageSecondary">English</button>
+          <button type="button" data-display-language="both">Beide</button>
+        </div>
       </div>
     </div>
 
@@ -251,10 +258,14 @@
         <button id="saveQuiz" class="primary" type="button"><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg>Quiz opslaan</button>
       </div>
       <label class="field quiz-title-field"><span>Quiztitel</span><input id="quizTitleInput" maxlength="120" placeholder="Bijv. Film & TV avond" autocomplete="off"></label>
+      <div class="quiz-languages">
+        <label class="field"><span>Taal 1</span><input id="quizLanguagePrimary" maxlength="40" value="Nederlands" autocomplete="off"></label>
+        <label class="field"><span>Taal 2</span><input id="quizLanguageSecondary" maxlength="40" value="English" autocomplete="off"></label>
+      </div>
       <div id="quizQuestions" class="question-editor"></div>
       <div class="quiz-editor-foot">
         <button id="addQuestion" class="secondary" type="button"><svg class="icon" aria-hidden="true"><use href="#i-plus"/></svg>Vraag toevoegen</button>
-        <p id="quizStatus" class="hint" role="status" aria-live="polite">Elke vraag heeft een tekst, afbeelding en puntenwaarde nodig.</p>
+        <p id="quizStatus" class="hint" role="status" aria-live="polite">Elke vraag heeft een tekst in de eerste taal, een afbeelding en punten nodig; de tweede taal is optioneel.</p>
       </div>
     </section>
    </section>

@@ -5,7 +5,7 @@ const DATABASE_URL=secret('DATABASE_URL_FILE','DATABASE_URL'),PEPPER=secret('SEC
 const PORT=+(process.env.PORT||8080),PUBLIC=path.join(__dirname,'public'),ORIGINS=(process.env.ALLOWED_ORIGINS||'http://localhost:8080').split(',').map(s=>s.trim()).filter(Boolean),QR_KEY=Buffer.from(QR_SECRET||'','base64'),TRUST_PROXY_HOPS=proxyHops();if(!DATABASE_URL||!PEPPER||QR_KEY.length!==32)throw new Error('Database URL, secret pepper and 32-byte QR encryption key are required');
 const SESSION_TTL_SECONDS=24*60*60,LOGIN_CLIENT_LIMIT=8,LOGIN_ROOM_LIMIT=30;
 const db=new Pool({connectionString:DATABASE_URL,max:+process.env.DB_POOL_MAX||10,idleTimeoutMillis:30000,connectionTimeoutMillis:5000,ssl:process.env.DB_SSL==='1'?{rejectUnauthorized:true,ca:process.env.DB_CA}:false,application_name:'scorescan-v1'});db.on('error',e=>log('critical','db_pool_error',{message:e.message}));
-const ipBuckets=new Map(),authBuckets=new Map(),connections=new Map(),imageBuckets=new Map(),quizBuckets=new Map(),displayModes=new Map(),hashQueue=[];let hashActive=false;
+const ipBuckets=new Map(),authBuckets=new Map(),connections=new Map(),imageBuckets=new Map(),quizBuckets=new Map(),displayModes=new Map(),displayLanguages=new Map(),hashQueue=[];let hashActive=false;
 const b64=n=>crypto.randomBytes(n).toString('base64url'),safeEq=(a,b)=>a.length===b.length&&crypto.timingSafeEqual(a,b);function hmac(x){return crypto.createHmac('sha256',PEPPER).update(x).digest()}
 function proxyHops(){const raw=process.env.TRUST_PROXY_HOPS??(process.env.TRUST_PROXY==='1'?'1':'0'),value=Number(raw);return Number.isInteger(value)&&value>=0&&value<=8?value:0}
 function drainHashes(){
@@ -117,12 +117,18 @@ async function quizSave(req,res,reqId){
   if(!room){res.writeHead(401);res.end('{"error":"session_expired"}');return}
   if(limited(quizBuckets,ip(req),30,15*60e3)){res.writeHead(429);res.end('{"error":"rate_limited"}');return}
   const body=await read(req,262144),title=txt(body.title,120),input=Array.isArray(body.questions)?body.questions:[];
-  if(!title||!input.length||input.length>100){res.writeHead(400);res.end('{"error":"invalid_input"}');return}
+  const languagePrimary=body.languagePrimary===undefined?'Nederlands':txt(body.languagePrimary,40),languageSecondary=body.languageSecondary===undefined?'English':txt(body.languageSecondary,40);
+  if(!title||!languagePrimary||!languageSecondary||!input.length||input.length>100){res.writeHead(400);res.end('{"error":"invalid_input"}');return}
   const questions=[];
   for(const item of input){
    const prompt=txt(item&&item.prompt,500),points=integer(item&&item.points,1,1000000),imageId=item&&validUuid(item.imageId)?item.imageId:null;
+   let promptAlt=null;
+   if(item&&item.promptAlt!==undefined&&item.promptAlt!==null&&item.promptAlt!==''){
+    if(typeof item.promptAlt!=='string'||!txt(item.promptAlt,500)){res.writeHead(400);res.end('{"error":"invalid_input"}');return}
+    promptAlt=txt(item.promptAlt,500);
+   }
    if(!prompt||points===null||!imageId){res.writeHead(400);res.end('{"error":"invalid_input"}');return}
-   questions.push({prompt,points,imageId});
+   questions.push({prompt,promptAlt,points,imageId});
   }
   const ids=[...new Set(questions.map(q=>q.imageId))];
   const owned=(await c.query('SELECT id FROM quiz_images WHERE room_id=$1 AND id=ANY($2::uuid[])',[room.id,ids])).rows.map(row=>row.id);
@@ -132,13 +138,13 @@ async function quizSave(req,res,reqId){
   await c.query('BEGIN');started=true;
   let quizId;
   if(update){
-   if(!(await c.query('UPDATE quizzes SET title=$1,updated_at=clock_timestamp() WHERE room_id=$2 AND id=$3 RETURNING id',[title,room.id,body.quizId])).rowCount)throw Error('quiz');
+   if(!(await c.query('UPDATE quizzes SET title=$1,language_primary=$2,language_secondary=$3,updated_at=clock_timestamp() WHERE room_id=$4 AND id=$5 RETURNING id',[title,languagePrimary,languageSecondary,room.id,body.quizId])).rowCount)throw Error('quiz');
    quizId=body.quizId;
    await c.query('DELETE FROM quiz_questions WHERE quiz_id=$1',[quizId]);
   }else{
-   quizId=(await c.query('INSERT INTO quizzes(room_id,title) VALUES($1,$2) RETURNING id',[room.id,title])).rows[0].id;
+   quizId=(await c.query('INSERT INTO quizzes(room_id,title,language_primary,language_secondary) VALUES($1,$2,$3,$4) RETURNING id',[room.id,title,languagePrimary,languageSecondary])).rows[0].id;
   }
-  for(let i=0;i<questions.length;i++)await c.query('INSERT INTO quiz_questions(quiz_id,ordinal,prompt,points,image_id) VALUES($1,$2,$3,$4,$5)',[quizId,i+1,questions[i].prompt,questions[i].points,questions[i].imageId]);
+  for(let i=0;i<questions.length;i++)await c.query('INSERT INTO quiz_questions(quiz_id,ordinal,prompt,prompt_alt,points,image_id) VALUES($1,$2,$3,$4,$5,$6)',[quizId,i+1,questions[i].prompt,questions[i].promptAlt,questions[i].points,questions[i].imageId]);
   await c.query('UPDATE rooms SET revision=revision+1,updated_at=now() WHERE id=$1',[room.id]);
   await audit(c,room.id,room.session_id,update?'quiz_updated':'quiz_created','ok',reqId,req,{quizId,questions:questions.length});
   await c.query('COMMIT');started=false;
@@ -180,9 +186,9 @@ async function state(c,slug,gameId,includeQuizzes=false){
  try{
   const r=(await c.query('SELECT * FROM rooms WHERE slug=$1',[slug])).rows[0];
   if(!r){await c.query('COMMIT');return null}
-  const games=(await c.query('SELECT id,points_per_question,current_question,legacy,started_at,ended_at,quiz_id,quiz_title,question_count FROM games WHERE room_id=$1 ORDER BY started_at DESC,id',[r.id])).rows.map(g=>({id:g.id,pointsPerQuestion:g.points_per_question,question:g.current_question,legacy:g.legacy,startedAt:g.started_at,endedAt:g.ended_at,quizId:g.quiz_id,quizTitle:g.quiz_title,questionCount:g.question_count}));
+  const games=(await c.query('SELECT id,points_per_question,current_question,legacy,started_at,ended_at,quiz_id,quiz_title,language_primary,language_secondary,question_count FROM games WHERE room_id=$1 ORDER BY started_at DESC,id',[r.id])).rows.map(g=>({id:g.id,pointsPerQuestion:g.points_per_question,question:g.current_question,legacy:g.legacy,startedAt:g.started_at,endedAt:g.ended_at,quizId:g.quiz_id,quizTitle:g.quiz_title,languagePrimary:g.language_primary,languageSecondary:g.language_secondary,questionCount:g.question_count}));
   const activeGame=games.find(g=>!g.endedAt),game=games.find(g=>g.id===gameId)||activeGame||games[0]||null;
-  const questions=game?(await c.query('SELECT id,ordinal,points,label,prompt,image_id FROM game_questions WHERE game_id=$1 ORDER BY ordinal',[game.id])).rows:[];
+  const questions=game?(await c.query('SELECT id,ordinal,points,label,prompt,prompt_alt,image_id FROM game_questions WHERE game_id=$1 ORDER BY ordinal',[game.id])).rows:[];
   const awards=game?(await c.query(`SELECT w.question_id,w.player_id,
    COALESCE(w.legacy_points::numeric,q.points::numeric/count(*) OVER(PARTITION BY q.id)) points
    FROM question_winners w JOIN game_questions q ON q.id=w.question_id WHERE q.game_id=$1`,[game.id])).rows:[];
@@ -195,12 +201,12 @@ async function state(c,slug,gameId,includeQuizzes=false){
   });
   let quizzes=[];
   if(includeQuizzes){
-   const quizRows=(await c.query('SELECT id,title,updated_at FROM quizzes WHERE room_id=$1 ORDER BY updated_at DESC,id',[r.id])).rows;
+   const quizRows=(await c.query('SELECT id,title,language_primary,language_secondary,updated_at FROM quizzes WHERE room_id=$1 ORDER BY updated_at DESC,id',[r.id])).rows;
    const quizIds=quizRows.map(q=>q.id);
-   const quizQuestions=quizIds.length?(await c.query('SELECT quiz_id,id,ordinal,prompt,points,image_id FROM quiz_questions WHERE quiz_id=ANY($1::uuid[]) ORDER BY quiz_id,ordinal',[quizIds])).rows:[];
-   quizzes=quizRows.map(q=>({id:q.id,title:q.title,updatedAt:q.updated_at,questions:quizQuestions.filter(x=>x.quiz_id===q.id).map(x=>({id:x.id,ordinal:x.ordinal,prompt:x.prompt,points:x.points,imageId:x.image_id,imageUrl:x.image_id?'/api/images/'+x.image_id:null,thumbUrl:x.image_id?'/api/images/'+x.image_id+'?thumb=1':null}))}));
+   const quizQuestions=quizIds.length?(await c.query('SELECT quiz_id,id,ordinal,prompt,prompt_alt,points,image_id FROM quiz_questions WHERE quiz_id=ANY($1::uuid[]) ORDER BY quiz_id,ordinal',[quizIds])).rows:[];
+   quizzes=quizRows.map(q=>({id:q.id,title:q.title,languagePrimary:q.language_primary,languageSecondary:q.language_secondary,updatedAt:q.updated_at,questions:quizQuestions.filter(x=>x.quiz_id===q.id).map(x=>({id:x.id,ordinal:x.ordinal,prompt:x.prompt,promptAlt:x.prompt_alt,points:x.points,imageId:x.image_id,imageUrl:x.image_id?'/api/images/'+x.image_id:null,thumbUrl:x.image_id?'/api/images/'+x.image_id+'?thumb=1':null}))}));
   }
-  const result={title:r.title,displayMode:displayModes.get(r.id)||r.display_mode||'scores',games,activeGameId:activeGame?.id||null,game:game?{...game,questions:questions.map(q=>({...q,prompt:q.prompt,imageId:q.image_id,imageUrl:q.image_id?'/api/images/'+q.image_id:null,thumbUrl:q.image_id?'/api/images/'+q.image_id+'?thumb=1':null,winners:awards.filter(a=>a.question_id===q.id).map(a=>({playerId:a.player_id,points:Number(a.points)}))}))}:null,players,...(includeQuizzes?{quizzes}:{}),revision:Number(r.revision)};
+  const result={title:r.title,displayMode:displayModes.get(r.id)||r.display_mode||'scores',displayLanguage:displayLanguages.get(r.id)||r.display_language||'primary',games,activeGameId:activeGame?.id||null,game:game?{...game,questions:questions.map(q=>({...q,prompt:q.prompt,promptAlt:q.prompt_alt,imageId:q.image_id,imageUrl:q.image_id?'/api/images/'+q.image_id:null,thumbUrl:q.image_id?'/api/images/'+q.image_id+'?thumb=1':null,winners:awards.filter(a=>a.question_id===q.id).map(a=>({playerId:a.player_id,points:Number(a.points)}))}))}:null,players,...(includeQuizzes?{quizzes}:{}),revision:Number(r.revision)};
   await c.query('COMMIT');return result;
  }catch(e){await c.query('ROLLBACK');throw e}
 }
@@ -341,6 +347,11 @@ async function revokeAllSessions(req,res,reqId){
   await c.query(`SELECT hs.socket_role,st.socket_role,la.key_hash
    FROM host_sessions hs CROSS JOIN socket_tickets st CROSS JOIN login_attempts la
    LIMIT 0`);
+  await c.query('SELECT display_mode,display_language FROM rooms LIMIT 0');
+  await c.query('SELECT language_primary,language_secondary FROM quizzes LIMIT 0');
+  await c.query('SELECT prompt_alt FROM quiz_questions LIMIT 0');
+  await c.query('SELECT language_primary,language_secondary FROM games LIMIT 0');
+  await c.query('SELECT prompt_alt FROM game_questions LIMIT 0');
  }
 async function createRoom(req,res,reqId){
  sec(res);
@@ -397,6 +408,7 @@ async function auth(ws,m,req){
   const room=await ticketSession(c,m.socketTicket,m.role),sid=room?.session_id;
   if(!room)throw Error('session_expired');
   ws.sessionExpiresAt=new Date(room.session_expires_at).getTime();
+  ws.sessionExpiryTimer=setTimeout(()=>ws.close(4401,'authentication_expired'),Math.max(0,ws.sessionExpiresAt-Date.now()));
   ws.room=room;ws.role=m.role;ws.session=sid;ws.req=req;ws.roomSlug=room.slug;ws.authed=true;
   ws.send(JSON.stringify({type:'auth.ok',roomId:room.slug,state:await state(c,room.slug,undefined,m.role==='host')}));
  }finally{c.release()}
@@ -436,21 +448,34 @@ async function act(ws,m){
     log('warning','display_mode_column_missing',{roomId:room.id});
    }
    displayModes.set(room.id,mode);
+  }else if(m.type==='display.language'){
+   const language=['primary','secondary','both'].includes(m.language)?m.language:null;
+   if(!language)throw Error('language');
+   await c.query('SAVEPOINT display_language');
+   try{
+    await c.query('UPDATE rooms SET display_language=$1 WHERE id=$2',[language,room.id]);
+    await c.query('RELEASE SAVEPOINT display_language');
+   }catch(error){
+    await c.query('ROLLBACK TO SAVEPOINT display_language');await c.query('RELEASE SAVEPOINT display_language');
+    if(error.code!=='42703')throw error;
+    log('warning','display_language_column_missing',{roomId:room.id});
+   }
+   displayLanguages.set(room.id,language);
   }else if(m.type==='game.start'){
    const quizId=m.quizId===undefined||m.quizId===null||m.quizId===''?null:m.quizId;
    const points=integer(m.pointsPerQuestion,1,1000000);
    let quiz=null,quizQuestions=[];
    if(quizId!==null){
     if(!validUuid(quizId))throw Error('quiz');
-    quiz=(await c.query('SELECT id,title FROM quizzes WHERE room_id=$1 AND id=$2',[room.id,quizId])).rows[0];
+    quiz=(await c.query('SELECT id,title,language_primary,language_secondary FROM quizzes WHERE room_id=$1 AND id=$2',[room.id,quizId])).rows[0];
     if(!quiz)throw Error('quiz');
-    quizQuestions=(await c.query('SELECT prompt,points,image_id FROM quiz_questions WHERE quiz_id=$1 ORDER BY ordinal',[quizId])).rows;
+    quizQuestions=(await c.query('SELECT prompt,prompt_alt,points,image_id FROM quiz_questions WHERE quiz_id=$1 ORDER BY ordinal',[quizId])).rows;
     if(!quizQuestions.length)throw Error('quiz_empty');
    }else if(points===null)throw Error('input');
    if((await c.query('SELECT 1 FROM games WHERE room_id=$1 AND ended_at IS NULL',[room.id])).rowCount)throw Error('game_running');
    if(quiz){
-    const game=(await c.query('INSERT INTO games(room_id,points_per_question,quiz_id,quiz_title,question_count) VALUES($1,$2,$3,$4,$5) RETURNING id',[room.id,quizQuestions[0].points,quiz.id,quiz.title,quizQuestions.length])).rows[0];
-    for(let i=0;i<quizQuestions.length;i++)await c.query('INSERT INTO game_questions(game_id,ordinal,points,label,prompt,image_id) VALUES($1,$2,$3,$4,$5,$6)',[game.id,i+1,quizQuestions[i].points,'Vraag '+(i+1),quizQuestions[i].prompt,quizQuestions[i].image_id]);
+    const game=(await c.query('INSERT INTO games(room_id,points_per_question,quiz_id,quiz_title,language_primary,language_secondary,question_count) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING id',[room.id,quizQuestions[0].points,quiz.id,quiz.title,quiz.language_primary,quiz.language_secondary,quizQuestions.length])).rows[0];
+    for(let i=0;i<quizQuestions.length;i++)await c.query('INSERT INTO game_questions(game_id,ordinal,points,label,prompt,prompt_alt,image_id) VALUES($1,$2,$3,$4,$5,$6,$7)',[game.id,i+1,quizQuestions[i].points,'Vraag '+(i+1),quizQuestions[i].prompt,quizQuestions[i].prompt_alt,quizQuestions[i].image_id]);
     ws.gameId=game.id;
    }else{
     const game=(await c.query('INSERT INTO games(room_id,points_per_question) VALUES($1,$2) RETURNING id',[room.id,points])).rows[0];
@@ -494,13 +519,13 @@ async function act(ws,m){
    }else throw Error('action');
   }
   await c.query('UPDATE rooms SET revision=revision+1,updated_at=now() WHERE id=$1',[room.id]);
-  await audit(c,room.id,ws.session,m.type,'ok',reqId,ws.req,{gameId:m.gameId,quizId:m.quizId,mode:m.mode,questionId:m.questionId,playerId:m.playerId,idempotencyKey:m.idempotencyKey});
+  await audit(c,room.id,ws.session,m.type,'ok',reqId,ws.req,{gameId:m.gameId,quizId:m.quizId,mode:m.mode,language:m.language,questionId:m.questionId,playerId:m.playerId,idempotencyKey:m.idempotencyKey});
   await c.query('COMMIT');
   if(result)ws.send(JSON.stringify(result));
   for(const x of wss.clients)if(x.authed&&x.room?.id===room.id&&x.readyState===1){try{x.send(JSON.stringify({type:'state',state:await state(c,ws.roomSlug,x.gameId,x.role==='host')}))}catch(error){log('warning','state_send_failed',{reason:error.message})}}
  }catch(e){
   await c.query('ROLLBACK');log('warning','action_rejected',{type:m.type,reason:e.code||e.message});
-  const reasons=['input','player','game_running','no_active_game','stale_question','question_limit','question','duplicate_request','nothing','action','quiz','quiz_empty','quiz_finished','mode'];
+  const reasons=['input','player','game_running','no_active_game','stale_question','question_limit','question','duplicate_request','nothing','action','quiz','quiz_empty','quiz_finished','mode','language'];
   ws.send(JSON.stringify({type:'error',code:'action_rejected',reason:reasons.includes(e.message)?e.message:e.code==='23505'?'duplicate_qr':'request_failed'}));
  }finally{c.release()}
 }
@@ -524,5 +549,5 @@ wss.on('connection',(ws,req)=>{
   });
  });
  ws.on('error',e=>log('warning','ws_error',{reason:e.message}));
- ws.on('close',()=>clearTimeout(timer));
+ ws.on('close',()=>{clearTimeout(timer);clearTimeout(ws.sessionExpiryTimer)});
 });setInterval(async()=>{try{await db.query("DELETE FROM host_sessions WHERE expires_at<now() OR revoked_at IS NOT NULL AND revoked_at<now()-interval '7 days'");await db.query("DELETE FROM socket_tickets WHERE expires_at<now()");await db.query("DELETE FROM login_attempts WHERE expires_at<now()");await db.query("DELETE FROM quiz_images i WHERE i.created_at<now()-interval '30 days' AND NOT EXISTS(SELECT 1 FROM quiz_questions q WHERE q.image_id=i.id) AND NOT EXISTS(SELECT 1 FROM game_questions g WHERE g.image_id=i.id)")}catch{}},3600000).unref();server.listen(PORT,()=>log('info','started',{port:PORT}));

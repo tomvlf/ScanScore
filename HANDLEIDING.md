@@ -15,8 +15,10 @@ serialiseert wijzigingen binnen één quizruimte. Een UUID-idempotency key
 voorkomt dat dezelfde scanrequest tweemaal wordt verwerkt.
 
 ## Quizzen en afbeeldingen
-Een ruimte kan meerdere quizzes bevatten. Elke quiz bestaat uit vragen met een
-tekst, een afbeelding (JPG, PNG of WebP, maximaal 5 MB) en een puntenwaarde.
+Een ruimte kan meerdere quizzes bevatten. Elke quiz heeft een naam voor twee
+talen, bijvoorbeeld Nederlands en English. Elke vraag heeft een verplichte tekst
+in de eerste taal, een optionele vertaling, een afbeelding (JPG, PNG of WebP,
+maximaal 5 MB) en een puntenwaarde.
 Afbeeldingen worden als onveranderlijke assets in PostgreSQL bewaard en zitten
 dus automatisch in de databaseback-up. De reverse proxy moet request bodies van
 minimaal 6 MB doorlaten.
@@ -25,10 +27,11 @@ Bij het starten van een sessie worden de quizvraag, afbeelding en punten in het
 spel gekopieerd. Later bewerken of verwijderen van de quiz verandert lopende of
 afgesloten sessies niet. Een quiz blijft herbruikbaar voor nieuwe sessies. Het
 quizmaster kiest op het bedieningsscherm tussen **Klassement** en
-**Vraag + beeld**. Het publieke scherm volgt die keuze via de ruimte, ook op een
-ander toestel, en wisselt automatisch mee naar de volgende vraag. De
-vraagweergave vult het scherm; de ruimtenaam staat klein onder de vraag- en
-deelnemersinfo.
+**Vraag + beeld**, en kiest daar ook de taal: eerste taal, tweede taal of beide.
+Het publieke scherm volgt die keuzes via de ruimte, ook op een ander toestel, en
+wisselt automatisch mee naar de volgende vraag. De vraagweergave vult het
+scherm; de ruimtenaam staat klein onder de vraag- en deelnemersinfo. Ontbreekt
+een tweede taal voor een vraag, dan wordt de eerste taal getoond.
 
 ## Spellen en punten
 Per ruimte kan één spel tegelijk actief zijn. Bij een quizsessie komen de punten

@@ -26,11 +26,38 @@ services:
     cap_drop: [ALL]
     cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETGID, SETUID]
 
+  schema-upgrade:
+    image: postgres:17-alpine
+    depends_on:
+      db: {condition: service_healthy}
+    environment:
+      PGHOST: db
+      PGPORT: "5432"
+      PGDATABASE: scanscore
+      PGUSER: scanscore_owner
+      PGPASSWORD: ${DB_OWNER_PASSWORD:?Set DB_OWNER_PASSWORD in .env}
+    volumes:
+      - ./scripts/schema-upgrades:/schema:ro
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+        for f in /schema/*.sql; do
+          echo "Applying $$f"
+          psql -v ON_ERROR_STOP=1 -f "$$f"
+        done
+    networks: [backend]
+    restart: "no"
+    read_only: true
+    tmpfs: ["/tmp:size=16m,noexec,nosuid,nodev"]
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+
   app:
     build: .
     restart: unless-stopped
     depends_on:
       db: {condition: service_healthy}
+      schema-upgrade: {condition: service_completed_successfully}
     environment:
       NODE_ENV: production
       DATABASE_URL: ${RUNTIME_DATABASE_URL:?Set RUNTIME_DATABASE_URL in .env}

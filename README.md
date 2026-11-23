@@ -216,10 +216,11 @@ Open je publieke ScoreScan-adres en doorloop deze controle:
 ## Een quiz maken
 
 1. Open **Quizzen** en kies **Nieuwe quiz**.
-2. Vul een quiztitel in en voeg per vraag een tekst, een afbeelding en een puntenwaarde toe.
-3. Afbeeldingen mogen JPG, PNG of WebP zijn en maximaal 5 MB groot. De afbeelding wordt in de database bewaard en meegestuurd in back-ups.
-4. Voeg vragen toe, verplaats ze met de pijlen of verwijder ze. Kies **Quiz opslaan**.
-5. Een quiz blijft bewerkbaar en is opnieuw te spelen. Een gestarte sessie houdt een snapshot van de vraagtekst, afbeelding en punten, zodat spelhistoriek nooit verandert.
+2. Geef de quiz een titel en naam voor beide talen, bijvoorbeeld **Nederlands** en **English**.
+3. Voeg per vraag een tekst in de eerste taal, optioneel een vertaling in de tweede taal, een afbeelding en een puntenwaarde toe.
+4. Afbeeldingen mogen JPG, PNG of WebP zijn en maximaal 5 MB groot. De afbeelding wordt in de database bewaard en meegestuurd in back-ups.
+5. Voeg vragen toe, verplaats ze met de pijlen of verwijder ze. Kies **Quiz opslaan**.
+6. Een quiz blijft bewerkbaar en is opnieuw te spelen. Een gestarte sessie houdt een snapshot van de vraagteksten, afbeelding en punten, zodat spelhistoriek nooit verandert.
 
 Start een sessie met **Start** op de quizkaart, of kies de quiz op **Spelen**. De spelers, QR-kaarten en het scoreverloop werken zoals bij een snel spel.
 
@@ -320,10 +321,13 @@ nieuwe aanmelding naar een host-sessie worden omgezet. Ook dit scherm blijft na
 vernieuwen of heropenen aangemeld. Het scorebord kan
 geen deelnemers of scores wijzigen. Kies **Totaalpunten** of **Punten per vraag** en selecteer desgewenst een
 eerder spel. De quizmaster kiest op **Spelen** tussen **Klassement** en
-**Vraag + beeld**. Het publieke scherm volgt die keuze direct, ook op een ander
-toestel. In de vraagweergave vullen de afbeelding en vraag het volledige
-scherm; de ruimtenaam, het aantal deelnemers en het aantal vragen staan klein
-onderaan. De vraag wisselt automatisch mee met de volgende vraag.
+**Vraag + beeld**. Daarnaast kiest de quizmaster welke taal het publieke scherm
+toont: de eerste taal, de tweede taal of beide. Het publieke scherm volgt die
+keuzes direct, ook op een ander toestel. In de vraagweergave vullen de afbeelding
+en vraag het volledige scherm; de ruimtenaam, het aantal deelnemers en het aantal
+vragen staan klein onderaan. De vraag wisselt automatisch mee met de volgende
+vraag. Ontbreekt een vertaling voor een vraag, dan valt het scherm terug op de
+eerste taal.
 
 Het gedeelde wachtwoord geeft ook toegang tot de spelbediening: deel het alleen
 met vertrouwde personen. Wachtwoorden worden niet langer rechtstreeks op de
@@ -367,17 +371,11 @@ docker compose ps
 ./scripts/test-runtime-privileges.sh
 ```
 
-Heb je de database al aangemaakt met het nieuwe schema van vóór de schermkeuze
-voor het publieke scherm? Voeg de kolom dan eenmalig toe:
-
-```bash
-docker compose exec -T db sh -c 'PGPASSWORD="$POSTGRES_PASSWORD" psql -U scanscore_owner -d scanscore' < scripts/add-display-mode.sql
-```
-
-Een volledig nieuwe installatie krijgt de kolom automatisch via
-`postgres-init/003-schema.sql`. Zonder de kolom blijft de schermkeuze tijdens
-de huidige serverrun werken, maar ze wordt pas na het toevoegen van de kolom
-over een herstart heen bewaard.
+De `schema-upgrade`-service past bij iedere `docker compose up` de idempotente
+scripts uit `scripts/schema-upgrades/` toe met de database-ownerrol. Zo krijgen
+bestaande databases automatisch nieuwe kolommen; de app start pas nadat de
+upgrade geslaagd is. Een volledig nieuwe installatie krijgt hetzelfde schema
+via `postgres-init/003-schema.sql`.
 
 ## Back-up maken
 
