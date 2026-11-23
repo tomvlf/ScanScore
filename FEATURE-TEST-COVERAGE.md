@@ -53,6 +53,7 @@ Voer deze extra integratietest lokaal uit met Docker/PostgreSQL:
 - quizsessie starten met eigen punten per vraag;
 - laatste vraag afronden en `quiz_finished` weigeren;
 - display aanmelden, de actieve vraag ontvangen en geen quizlijst ontvangen;
+- schermkeuze van de quizmaster via de ruimte naar een publiek scherm sturen;
 - displaymutatie weigeren.
 
 ### Databaseprivilegetest

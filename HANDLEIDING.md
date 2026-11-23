@@ -24,8 +24,9 @@ minimaal 6 MB doorlaten.
 Bij het starten van een sessie worden de quizvraag, afbeelding en punten in het
 spel gekopieerd. Later bewerken of verwijderen van de quiz verandert lopende of
 afgesloten sessies niet. Een quiz blijft herbruikbaar voor nieuwe sessies. Het
-publieke scorebord heeft de weergave **Vraag tonen** om de actieve vraag groot
-te presenteren.
+quizmaster kiest op het bedieningsscherm tussen **Klassement** en
+**Vraag + beeld**. Het publieke scherm volgt die keuze via de ruimte, ook op een
+ander toestel, en wisselt automatisch mee naar de volgende vraag.
 
 ## Spellen en punten
 Per ruimte kan één spel tegelijk actief zijn. Bij een quizsessie komen de punten

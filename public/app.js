@@ -110,6 +110,13 @@ function page(name) {
 
 $$('[data-page]').forEach(element => element.onclick = () => page(element.dataset.page));
 
+$$('[data-display-mode]').forEach(button => {
+  button.onclick = () => {
+    if (!state || state.displayMode === button.dataset.displayMode) return;
+    send({ type: 'display.mode', mode: button.dataset.displayMode });
+  };
+});
+
 /* ---------- Game helpers ---------- */
 
 function currentQuestion() {
@@ -164,6 +171,16 @@ function render() {
   $('#returnToGame').classList.toggle('hidden', !state.activeGameId || editable);
   $('.play-meta').classList.toggle('hidden', !game);
   $('#reader').classList.toggle('hidden', !editable);
+  const displayMode = state.displayMode === 'question' ? 'question' : 'scores';
+  $('#displaySwitch').classList.toggle('hidden', !game && displayMode !== 'question');
+  $$('[data-display-mode]').forEach(button => {
+    const active = button.dataset.displayMode === displayMode;
+    button.classList.toggle('active', active);
+    button.setAttribute?.('aria-pressed', active ? 'true' : 'false');
+  });
+  $('#displaySwitchNote').textContent = displayMode === 'question'
+    ? 'Het grote scherm toont de actieve vraag met afbeelding.'
+    : 'Het grote scherm toont het klassement.';
   $('#playTitle').textContent = game ? `${editable ? '' : 'Gestopt spel · '}Vraag ${game.question}` : 'Nog geen spel';
   const quizPrefix = game?.quizTitle ? `Quiz “${game.quizTitle}” · ` : '';
   $('#gameStatus').textContent = game
@@ -737,6 +754,7 @@ async function connect(name = $('#roomName').value.trim(), password = $('#secret
           quiz_finished: 'Dit was de laatste vraag. Rond de quiz af.',
           duplicate_quiz: 'Er bestaat al een quiz met deze titel.',
           invalid_image: 'De afbeelding kon niet worden gebruikt. Upload ze opnieuw.',
+          mode: 'Kies een geldige weergave voor het publieke scherm.',
           request_failed: 'De actie kon niet worden verwerkt. Probeer opnieuw.',
           nothing: 'Er is geen scan om ongedaan te maken.'
         }[message.reason] || 'Actie geweigerd. Vernieuw de pagina en probeer opnieuw.';

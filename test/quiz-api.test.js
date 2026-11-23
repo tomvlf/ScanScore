@@ -4,7 +4,7 @@ const test=require('node:test'),assert=require('node:assert/strict'),vm=require(
 const IMAGE='11111111-1111-4111-8111-111111111111',QUIZ='33333333-3333-4333-8333-333333333333';
 
 function application(){
- const stored=[],quizzes=[],games=[],gameQuestions=[];
+ const stored=[],quizzes=[],games=[],gameQuestions=[],roomUpdates=[];
  const client={
   async query(sql,values=[]){
    if(/^(BEGIN|COMMIT|ROLLBACK)/.test(sql))return {rows:[],rowCount:0};
@@ -20,6 +20,7 @@ function application(){
    if(sql.startsWith('UPDATE quizzes'))return {rows:[{id:values[2]}],rowCount:1};
    if(sql.startsWith('DELETE FROM quiz_questions')){stored.length=0;return {rows:[],rowCount:1}}
    if(sql.startsWith('INSERT INTO quiz_questions')){stored.push(values);return {rows:[],rowCount:1}}
+   if(sql.startsWith('UPDATE rooms SET display_mode')){roomUpdates.push(values[0]);return {rows:[],rowCount:1}}
    if(sql.startsWith('UPDATE rooms'))return {rows:[],rowCount:1};
    if(sql.startsWith('INSERT INTO audit_events'))return {rows:[],rowCount:1};
    return {rows:[],rowCount:0};
@@ -40,7 +41,7 @@ function application(){
   setInterval(){return {unref(){}}}
  });
  vm.runInContext(fs.readFileSync('server.js','utf8'),context);
- return {context,stored,quizzes,games,gameQuestions};
+ return {context,stored,quizzes,games,gameQuestions,roomUpdates};
 }
 
 function request(body){
@@ -85,4 +86,15 @@ test('quiz save stores ordered questions and validates image ownership',async()=
   ['game-id',1,25,'Vraag 1','Eerste vraag?',IMAGE],
   ['game-id',2,75,'Vraag 2','Tweede vraag?',IMAGE]
  ]));
+});
+
+test('display mode is a room setting controlled by the quizmaster',async()=>{
+ const app=application(),messages=[];
+ const socket={room:{id:'room-id',slug:'room-slug'},role:'host',session:'session-id',req:{headers:{},socket:{remoteAddress:'test-client'}},readyState:1,send(message){messages.push(JSON.parse(message))}};
+ await app.context.act(socket,{type:'display.mode',mode:'question'});
+ assert.equal(app.roomUpdates.at(-1),'question');
+ messages.length=0;
+ await app.context.act(socket,{type:'display.mode',mode:'invalid'});
+ assert.equal(messages[0].type,'error');
+ assert.equal(messages[0].reason,'mode');
 });

@@ -8,6 +8,7 @@ CREATE TABLE rooms(
  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
  slug varchar(40) NOT NULL UNIQUE CHECK(slug ~ '^[a-z0-9][a-z0-9_-]{2,39}$'),
  title varchar(80) NOT NULL CHECK(length(btrim(title)) BETWEEN 1 AND 80),
+ display_mode varchar(10) NOT NULL DEFAULT 'scores' CHECK(display_mode IN ('scores','question')),
  login_name varchar(80) NOT NULL UNIQUE
   CHECK(length(login_name) BETWEEN 1 AND 80 AND login_name=lower(btrim(login_name))),
  host_secret_hash text NOT NULL,

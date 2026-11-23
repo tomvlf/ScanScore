@@ -1675,6 +1675,51 @@ main {
 .question-card-copy h2 { margin: .25rem 0 .35rem; font-size: clamp(1.15rem, 2.2vw, 1.65rem); line-height: 1.25; letter-spacing: -.025em; }
 .question-card-copy p { margin: 0; font-size: .8rem; }
 
+/* ---------- Public screen control ---------- */
+
+.display-switch {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin: -4px 0 18px;
+  padding: .52rem .55rem .52rem .85rem;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+.display-switch-copy { display: flex; align-items: center; gap: .65rem; min-width: 0; }
+.display-switch-copy .icon-tile { width: 36px; height: 36px; border-radius: 11px; }
+.display-switch-copy .icon-tile .icon { width: 18px; height: 18px; }
+.display-switch-copy strong { display: block; font-size: .8rem; letter-spacing: -.01em; }
+.display-switch-copy small { display: block; color: var(--muted); font-size: .72rem; line-height: 1.35; }
+.segmented {
+  display: flex;
+  gap: 3px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-soft);
+  flex: none;
+}
+.segmented button {
+  min-height: 36px;
+  padding: .35rem .65rem;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--muted);
+  box-shadow: none;
+  font-size: .75rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+.segmented button .icon { width: 15px; height: 15px; }
+.segmented button:hover:not(:disabled) { background: var(--surface); color: var(--ink); transform: none; }
+.segmented button.active { background: var(--surface); color: var(--brand-ink); box-shadow: var(--shadow-sm); }
+
 /* ---------- Quiz builder ---------- */
 
 .quizgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 14px; }
@@ -1933,6 +1978,9 @@ main {
   .displaybody .header-actions { gap: .2rem; }
   .displaybody #fullscreen { min-width: 38px; padding: .3rem .45rem; }
 
+  .display-switch { align-items: stretch; flex-direction: column; gap: .55rem; padding: .7rem; }
+  .display-switch .segmented { width: 100%; }
+  .display-switch .segmented button { flex: 1; justify-content: center; }
   .question-card { grid-template-columns: 1fr; gap: 12px; padding: 14px; }
   .question-card-media { max-height: 180px; }
   .question-card-copy h2 { font-size: 1.1rem; }

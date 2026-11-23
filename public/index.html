@@ -137,6 +137,17 @@
     </div>
     <p id="poolInfo" class="pool-info" role="status"></p>
 
+    <div id="displaySwitch" class="display-switch hidden">
+      <div class="display-switch-copy">
+        <span class="icon-tile"><svg class="icon" aria-hidden="true"><use href="#i-tv"/></svg></span>
+        <div><strong>Publiek scherm</strong><small id="displaySwitchNote">Het grote scherm toont het klassement.</small></div>
+      </div>
+      <div class="segmented" role="group" aria-label="Weergave op het publieke scherm">
+        <button type="button" data-display-mode="scores"><svg class="icon" aria-hidden="true"><use href="#i-trophy"/></svg>Klassement</button>
+        <button type="button" data-display-mode="question"><svg class="icon" aria-hidden="true"><use href="#i-image"/></svg>Vraag + beeld</button>
+      </div>
+    </div>
+
     <section id="currentQuestion" class="card question-card hidden">
       <div id="questionMedia" class="question-card-media hidden"><img id="questionImage" alt=""></div>
       <div class="question-card-copy">

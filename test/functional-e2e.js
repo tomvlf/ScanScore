@@ -104,6 +104,12 @@ function close(...clients){for(const c of clients)c?.close()}
  r=await fetch(APP+'/api/quizzes/'+quiz.quizId,{method:'DELETE',headers:{origin:ORIGIN,cookie}});assert.equal(r.status,200);
  const quizGone=await host.next(x=>x.type==='state'&&!(x.state.quizzes||[]).some(q=>q.id===quiz.quizId));assert.equal(quizGone.state.quizzes.length,0);
  const display=new Client('display',hostSecret),displayAuth=await display.open();assert.equal(displayAuth.state.players.length,4);assert.ok(!('quizzes' in displayAuth.state));
+ await stateAfter(host,'display.mode',{mode:'question'});
+ const displayQuestion=await display.next(x=>x.type==='state'&&x.state.displayMode==='question');
+ assert.equal(displayQuestion.state.displayMode,'question');
+ assert.ok(displayQuestion.state.game.questions.find(q=>q.ordinal===displayQuestion.state.game.question)?.prompt);
+ await stateAfter(host,'display.mode',{mode:'scores'});
+ const displayScores=await display.next(x=>x.type==='state'&&x.state.displayMode==='scores');assert.equal(displayScores.state.displayMode,'scores');
  const selectedHistory=await stateAfter(display,'game.select',{gameId});assert.equal(selectedHistory.state.game.id,gameId);
  display.send({type:'question.next',gameId:nextGame.state.activeGameId,questionId:nextGame.state.game.questions[0].id});
  await new Promise((ok,no)=>{const timer=setTimeout(()=>no(Error('Display mutation was not rejected')),5000);display.ws.once('close',()=>{clearTimeout(timer);ok()})});

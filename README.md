@@ -27,7 +27,7 @@ ScoreScan is een selfhosted webapp voor quizzen, spellen en activiteiten waarbij
 3. Iedere vraag toont de tekst en afbeelding op het bedieningsscherm. De winnaars worden gescand en de pot wordt live gelijk onder hen verdeeld.
 4. De spelmeester kiest **Volgende vraag** zodra alle winnaars van die vraag gescand zijn. Na de laatste vraag rondt hij de quiz af.
 5. Eerdere vragen zijn tijdens het spel opnieuw te openen om winnaars te corrigeren.
-6. Het publieke scherm toont het klassement, of met de weergave **Vraag tonen** de actieve vraag groot in beeld.
+6. De quizmaster kiest op het bedieningsscherm of het publieke scherm het klassement of de actieve vraag toont. De vraag volgt automatisch bij **Volgende vraag**, ook als het publieke scherm op een ander toestel draait.
 
 ## Opbouw
 
@@ -318,9 +318,11 @@ Vul dezelfde ruimtenaam en hetzelfde wachtwoord in als op het bedieningsscherm.
 De scoreboardsessie is aan de `display`-rol gebonden en kan niet zonder een
 nieuwe aanmelding naar een host-sessie worden omgezet. Ook dit scherm blijft na
 vernieuwen of heropenen aangemeld. Het scorebord kan
-geen deelnemers of scores wijzigen. Kies **Totaalpunten**, **Punten per vraag** of **Vraag tonen** en selecteer
-desgewenst een eerder spel. **Vraag tonen** zet de actieve vraag met afbeelding
-groot in beeld, ideaal tijdens het antwoorden.
+geen deelnemers of scores wijzigen. Kies **Totaalpunten** of **Punten per vraag** en selecteer desgewenst een
+eerder spel. De quizmaster kiest op **Spelen** tussen **Klassement** en
+**Vraag + beeld**. Het publieke scherm volgt die keuze direct, ook op een ander
+toestel. In de vraagweergave staat de actieve vraag met afbeelding groot in
+beeld en wisselt ze automatisch mee met de volgende vraag.
 
 Het gedeelde wachtwoord geeft ook toegang tot de spelbediening: deel het alleen
 met vertrouwde personen. Wachtwoorden worden niet langer rechtstreeks op de
@@ -363,6 +365,16 @@ Controleer vervolgens:
 docker compose ps
 ./scripts/test-runtime-privileges.sh
 ```
+
+Heb je de database al aangemaakt met het nieuwe schema van vóór de schermkeuze
+voor het publieke scherm? Voeg de kolom dan eenmalig toe:
+
+```bash
+docker compose exec -T db sh -c 'PGPASSWORD="$POSTGRES_PASSWORD" psql -U scanscore_owner -d scanscore' < scripts/add-display-mode.sql
+```
+
+Een volledig nieuwe installatie krijgt de kolom automatisch via
+`postgres-init/003-schema.sql`.
 
 ## Back-up maken
 

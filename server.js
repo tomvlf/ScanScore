@@ -200,7 +200,7 @@ async function state(c,slug,gameId,includeQuizzes=false){
    const quizQuestions=quizIds.length?(await c.query('SELECT quiz_id,id,ordinal,prompt,points,image_id FROM quiz_questions WHERE quiz_id=ANY($1::uuid[]) ORDER BY quiz_id,ordinal',[quizIds])).rows:[];
    quizzes=quizRows.map(q=>({id:q.id,title:q.title,updatedAt:q.updated_at,questions:quizQuestions.filter(x=>x.quiz_id===q.id).map(x=>({id:x.id,ordinal:x.ordinal,prompt:x.prompt,points:x.points,imageId:x.image_id,imageUrl:x.image_id?'/api/images/'+x.image_id:null,thumbUrl:x.image_id?'/api/images/'+x.image_id+'?thumb=1':null}))}));
   }
-  const result={title:r.title,games,activeGameId:activeGame?.id||null,game:game?{...game,questions:questions.map(q=>({...q,prompt:q.prompt,imageId:q.image_id,imageUrl:q.image_id?'/api/images/'+q.image_id:null,thumbUrl:q.image_id?'/api/images/'+q.image_id+'?thumb=1':null,winners:awards.filter(a=>a.question_id===q.id).map(a=>({playerId:a.player_id,points:Number(a.points)}))}))}:null,players,...(includeQuizzes?{quizzes}:{}),revision:Number(r.revision)};
+  const result={title:r.title,displayMode:r.display_mode||'scores',games,activeGameId:activeGame?.id||null,game:game?{...game,questions:questions.map(q=>({...q,prompt:q.prompt,imageId:q.image_id,imageUrl:q.image_id?'/api/images/'+q.image_id:null,thumbUrl:q.image_id?'/api/images/'+q.image_id+'?thumb=1':null,winners:awards.filter(a=>a.question_id===q.id).map(a=>({playerId:a.player_id,points:Number(a.points)}))}))}:null,players,...(includeQuizzes?{quizzes}:{}),revision:Number(r.revision)};
   await c.query('COMMIT');return result;
  }catch(e){await c.query('ROLLBACK');throw e}
 }
@@ -423,6 +423,10 @@ async function act(ws,m){
    await c.query('INSERT INTO players(room_id,name,kind,qr_hash,qr_ciphertext) VALUES($1,$2,$3,$4,$5)',[room.id,name,kind,hmac(code),encQr(code)]);
   }else if(m.type==='player.remove'){
    if(!(await c.query('UPDATE players SET deleted_at=clock_timestamp() WHERE room_id=$1 AND id=$2 AND deleted_at IS NULL',[room.id,m.playerId])).rowCount)throw Error('player');
+  }else if(m.type==='display.mode'){
+   const mode=['scores','question'].includes(m.mode)?m.mode:null;
+   if(!mode)throw Error('mode');
+   await c.query('UPDATE rooms SET display_mode=$1 WHERE id=$2',[mode,room.id]);
   }else if(m.type==='game.start'){
    const quizId=m.quizId===undefined||m.quizId===null||m.quizId===''?null:m.quizId;
    const points=integer(m.pointsPerQuestion,1,1000000);
@@ -481,13 +485,13 @@ async function act(ws,m){
    }else throw Error('action');
   }
   await c.query('UPDATE rooms SET revision=revision+1,updated_at=now() WHERE id=$1',[room.id]);
-  await audit(c,room.id,ws.session,m.type,'ok',reqId,ws.req,{gameId:m.gameId,quizId:m.quizId,questionId:m.questionId,playerId:m.playerId,idempotencyKey:m.idempotencyKey});
+  await audit(c,room.id,ws.session,m.type,'ok',reqId,ws.req,{gameId:m.gameId,quizId:m.quizId,mode:m.mode,questionId:m.questionId,playerId:m.playerId,idempotencyKey:m.idempotencyKey});
   await c.query('COMMIT');
   if(result)ws.send(JSON.stringify(result));
   for(const x of wss.clients)if(x.authed&&x.room?.id===room.id&&x.readyState===1){try{x.send(JSON.stringify({type:'state',state:await state(c,ws.roomSlug,x.gameId,x.role==='host')}))}catch(error){log('warning','state_send_failed',{reason:error.message})}}
  }catch(e){
   await c.query('ROLLBACK');log('warning','action_rejected',{type:m.type,reason:e.code||e.message});
-  const reasons=['input','player','game_running','no_active_game','stale_question','question_limit','question','duplicate_request','nothing','action','quiz','quiz_empty','quiz_finished'];
+  const reasons=['input','player','game_running','no_active_game','stale_question','question_limit','question','duplicate_request','nothing','action','quiz','quiz_empty','quiz_finished','mode'];
   ws.send(JSON.stringify({type:'error',code:'action_rejected',reason:reasons.includes(e.message)?e.message:e.code==='23505'?'duplicate_qr':'request_failed'}));
  }finally{c.release()}
 }

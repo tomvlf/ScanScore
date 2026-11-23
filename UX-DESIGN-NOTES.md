@@ -14,7 +14,7 @@ Tijdens het spel moet de quizmaster bijna uitsluitend drie dingen zien: de actie
 - Elke vraag heeft een tekst, één uploadbare afbeelding en een puntenwaarde; vragen zijn te herordenen.
 - Afbeeldingen hebben een sleep-/klikvlak met preview en duidelijke limieten (JPG/PNG/WebP, 5 MB).
 - De spelmodus toont de actieve vraag met afbeelding boven de scanner.
-- Het publieke scherm heeft de weergave **Vraag tonen** met de actieve vraag groot in beeld.
+- De quizmaster kiest op **Spelen** tussen **Klassement** en **Vraag + beeld**. Het publieke scherm volgt die keuze via de ruimte en wisselt automatisch mee met de actieve vraag, ook op een ander toestel.
 - Een sessie houdt een snapshot van vraag, afbeelding en punten, zodat bewerken of verwijderen van de quiz de historiek niet wijzigt.
 
 ## Belangrijkste verbeteringen

@@ -23,8 +23,11 @@ function render(next) {
   $('#title').textContent = next.title;
 
   const game = next.game;
-  const view = $('#scoreView').value || 'total';
-  if (view !== $('#scoreView').value) $('#scoreView').value = view;
+  const scoreView = $('#scoreView').value || 'total';
+  const questionView = next.displayMode === 'question';
+  const view = questionView ? 'question' : scoreView;
+  if (!questionView && scoreView !== $('#scoreView').value) $('#scoreView').value = scoreView;
+  $('.board-controls').classList.toggle('hidden', questionView);
 
   const current = game?.questions?.find(question => question.ordinal === game.question);
   const winners = current?.winners?.length || 0;
@@ -35,7 +38,6 @@ function render(next) {
     : 'Nog geen spel gestart';
 
   const players = next.players || [];
-  const questionView = view === 'question';
   renderPodium(next, $('#podium'));
   $('#podium').classList.toggle('hidden', questionView || view !== 'total' || !players.length);
 

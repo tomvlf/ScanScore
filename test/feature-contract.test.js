@@ -14,9 +14,11 @@ test('operations and environment variable isolation are wired',()=>{for(const x 
 test('responsive and accessible UI affordances exist',()=>{for(const x of ['aria-live','class="mobile','class="skip','id="feedback"'])has(html,x);for(const x of ['prefers-reduced-motion','prefers-color-scheme','focus-visible','@media(max-width:650px)'])has(css,x)});
 test('quiz builder, image uploads and public question view are wired',()=>{
  for(const x of ["'/api/images'","'/api/quizzes'",'quiz_images','quiz_questions','question_count','quiz_finished'])has(server,x);
- for(const id of ['quizzes','quizEditor','quizSelect','currentQuestion','newQuiz','saveQuiz','addQuestion','quizList','quizTitleInput'])has(html,`id="${id}"`);
- for(const x of ['id="questionStage"','id="stageImage"','id="stagePrompt"','value="question"'])has(board,x);
- for(const x of ['quiz-card','question-stage','image-drop'])has(css,x);
+ for(const id of ['quizzes','quizEditor','quizSelect','currentQuestion','newQuiz','saveQuiz','addQuestion','quizList','quizTitleInput','displaySwitch','displaySwitchNote'])has(html,`id="${id}"`);
+ for(const x of ['data-display-mode="scores"','data-display-mode="question"'])has(html,x);
+ for(const x of ['id="questionStage"','id="stageImage"','id="stagePrompt"'])has(board,x);
+ for(const x of ['quiz-card','question-stage','image-drop','display-switch'])has(css,x);
+ for(const x of ["m.type==='display.mode'",'display_mode','displayMode'])has(server,x);
 });
 test('feature matrix is non-empty and categorized',()=>{const m=JSON.parse(fs.readFileSync('test/feature-matrix.json'));assert.ok(Object.keys(m).length>=8);for(const [k,v] of Object.entries(m))assert.ok(v.length>0,`${k} empty`)});
 test('presentation surfaces expose podium, confirmation and display tools',()=>{
