@@ -187,6 +187,21 @@ async function savedSession(c,req){
   FROM host_sessions s JOIN rooms r ON r.id=s.room_id
   WHERE s.token_hash=$1 AND s.revoked_at IS NULL AND s.expires_at>now()`,[hmac('browser-session:'+token)])).rows[0]||null;
 }
+function socketTicket(sessionId){
+ const payload=Buffer.from(JSON.stringify({sessionId,expiresAt:Date.now()+30000})).toString('base64url');
+ return payload+'.'+hmac('socket-ticket:'+payload).toString('base64url');
+}
+async function ticketSession(c,ticket){
+ if(typeof ticket!=='string'||ticket.length>512)return null;
+ const parts=ticket.split('.'),payload=parts[0],signature=parts.length===2?Buffer.from(parts[1],'base64url'):null;
+ if(!payload||!signature||signature.length!==32||!safeEq(signature,hmac('socket-ticket:'+payload)))return null;
+ let data;
+ try{data=JSON.parse(Buffer.from(payload,'base64url').toString('utf8'))}catch{return null}
+ if(typeof data.sessionId!=='string'||!Number.isSafeInteger(data.expiresAt)||data.expiresAt<=Date.now())return null;
+ return (await c.query(`SELECT r.*,s.id AS session_id,s.expires_at AS session_expires_at
+  FROM host_sessions s JOIN rooms r ON r.id=s.room_id
+  WHERE s.id=$1 AND s.revoked_at IS NULL AND s.expires_at>now()`,[data.sessionId])).rows[0]||null;
+}
 async function sessionRequest(req,res){
  sec(res);
  if(!['GET','POST','DELETE'].includes(req.method)){res.writeHead(405);res.end('{"error":"method_not_allowed"}');return}
@@ -206,7 +221,8 @@ async function sessionRequest(req,res){
     log('warning','session_login_rejected');res.writeHead(401);res.end('{"error":"denied"}');return;
    }
    const token=b64(32);
-   await c.query("INSERT INTO host_sessions(room_id,token_hash,expires_at) VALUES($1,$2,now()+interval '30 days')",[room.id,hmac('browser-session:'+token)]);
+   const session=(await c.query("INSERT INTO host_sessions(room_id,token_hash,expires_at) VALUES($1,$2,now()+interval '30 days') RETURNING id,expires_at",[room.id,hmac('browser-session:'+token)])).rows[0];
+   room={...room,session_id:session.id,session_expires_at:session.expires_at};
    res.setHeader('Set-Cookie',sessionCookie(req,token,30*24*60*60));
   }else{
    room=await savedSession(c,req);
@@ -219,7 +235,7 @@ async function sessionRequest(req,res){
    }
    if(!room){res.writeHead(401);res.end('{"error":"session_expired"}');return}
   }
-  res.end(JSON.stringify({roomName:room.title}));
+  res.end(JSON.stringify({roomName:room.title,socketTicket:socketTicket(room.session_id)}));
  }finally{c.release()}
 }
 const server=http.createServer(async(req,res)=>{const reqId=crypto.randomUUID();try{if(req.method==='GET'&&req.url.startsWith('/api/images/'))return await imageGet(req,res);const thumbRoute=/^\/api\/images\/([0-9a-f-]{36})\/thumbnail$/.exec(req.url);if(req.method==='POST'&&thumbRoute)return await imageThumb(req,res,thumbRoute[1],reqId);if(limited(ipBuckets,ip(req),120,60000)){sec(res);res.writeHead(429);return res.end('{"error":"rate_limited"}')}if(req.url==='/api/session')return await sessionRequest(req,res);if(req.method==='POST'&&req.url==='/api/images')return await imageUpload(req,res,reqId);if(req.method==='POST'&&req.url==='/api/quizzes')return await quizSave(req,res,reqId);if(req.method==='DELETE'&&req.url.startsWith('/api/quizzes/'))return await quizDelete(req,res,reqId);if(req.method==='POST'&&req.url==='/api/rooms'){if(!ORIGINS.includes(req.headers.origin)){sec(res);res.writeHead(403);return res.end('{"error":"origin_denied"}')}const b=await read(req),title=txt(b.roomName),secret=b.hostSecret;if(!title||typeof secret!=='string'||!((/^\d{8,16}$/.test(secret))||(secret.length>=12&&secret.length<=128))){sec(res);res.writeHead(400);return res.end('{"error":"invalid_input"}')}const client=ip(req);if(limited(roomBuckets,client,5,15*60e3)||limited(roomBuckets,'global',30,15*60e3)){sec(res);res.writeHead(429);return res.end('{"error":"rate_limited"}')}const slug=crypto.randomUUID(),token=b64(32),hostSecretHash=await passHash(secret),c=await db.connect();try{await c.query('BEGIN');const rr=(await c.query('INSERT INTO rooms(slug,title,login_name,host_secret_hash) VALUES($1,$2,lower($4),$3) RETURNING id',[slug,title,hostSecretHash,title])).rows[0];await c.query('INSERT INTO display_tokens(room_id,token_hash) VALUES($1,$2)',[rr.id,hmac(token)]);await audit(c,rr.id,null,'room_created','ok',reqId,req);await c.query('COMMIT');sec(res);res.writeHead(201);return res.end(JSON.stringify({roomId:slug,displayToken:token}))}catch(e){await c.query('ROLLBACK');throw e}finally{c.release()}}
@@ -230,7 +246,11 @@ async function auth(ws,m,req){
  const c=await db.connect();
  try{
   let room,sid,raw;
-  if(m.secret===undefined){
+  if(m.socketTicket!==undefined){
+   room=await ticketSession(c,m.socketTicket);
+   if(!room)throw Error('denied');
+   sid=room.session_id;ws.sessionExpiresAt=new Date(room.session_expires_at).getTime();
+  }else if(m.secret===undefined){
    room=await savedSession(c,req);
    if(!room)throw Error('denied');
    sid=room.session_id;ws.sessionExpiresAt=new Date(room.session_expires_at).getTime();

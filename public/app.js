@@ -688,7 +688,7 @@ async function connect(name = $('#roomName').value.trim(), password = $('#secret
     ws?.close();
     const socket = ws = new WebSocket(wsUrl());
 
-    socket.onopen = () => socket.send(JSON.stringify({ type: 'auth', role: 'host' }));
+    socket.onopen = () => socket.send(JSON.stringify(roomSession.authentication('host')));
 
     socket.onmessage = event => {
       if (ws !== socket) return;

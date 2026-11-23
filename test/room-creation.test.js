@@ -2,7 +2,7 @@
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
 const app=fs.readFileSync('public/app.js','utf8');
 
-function browser(fetch,{savedSession=null,loginStatus=200}={}){
+function browser(fetch,{savedSession=null,loginStatus=200,sessionResponse=null}={}){
  const elements=new Map(),sockets=[],sessionRequests=[];
  const document={
   querySelector(selector){
@@ -23,7 +23,7 @@ function browser(fetch,{savedSession=null,loginStatus=200}={}){
   if(url!=='/api/session')return fetch(url,options);
   sessionRequests.push(options);
   const status=options.method==='GET'?(savedSession?200:401):loginStatus;
-  return {status,ok:status===200,json:async()=>savedSession||{roomName:'Family Quiz'}};
+  return {status,ok:status===200,json:async()=>sessionResponse||savedSession||{roomName:'Family Quiz'}};
  },WebSocket,location:{protocol:'https:',host:'quiz.example.test'},confirm(){return true},setTimeout(){},clearTimeout(){}});
  vm.runInContext(fs.readFileSync('public/session.js','utf8'),context);
  vm.runInContext(fs.readFileSync('public/scores.js','utf8'),context);
@@ -83,6 +83,16 @@ test('hosts restore a saved session without requesting or sending a password',as
  assert.equal(sockets.length,1);sockets[0].onopen();
  assert.deepEqual(sockets[0].messages,[{type:'auth',role:'host'}]);
  assert.deepEqual(sessionRequests.map(r=>r.method),['GET']);
+});
+
+test('hosts use the short-lived ticket from login for websocket authentication',async()=>{
+ const {$,sockets}=browser(()=>assert.fail('Unexpected fetch'),{
+  sessionResponse:{roomName:'Family Quiz',socketTicket:'signed-ticket'}
+ });
+ $('#roomName').value='Family Quiz';$('#secret').value='a long host password';
+ await $('#loginForm').onsubmit({preventDefault(){}});
+ sockets[0].onopen();
+ assert.deepEqual(sockets[0].messages,[{type:'auth',role:'host',socketTicket:'signed-ticket'}]);
 });
 
 test('incorrect login credentials stay on the form without opening a socket',async()=>{

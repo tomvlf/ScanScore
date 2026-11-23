@@ -111,7 +111,7 @@ async function connect(resume = false) {
     $('#authMessage').classList.add('hidden');
     ws?.close();
     const socket = ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`);
-    socket.onopen = () => socket.send(JSON.stringify({ type: 'auth', role: 'display' }));
+    socket.onopen = () => socket.send(JSON.stringify(roomSession.authentication('display')));
     socket.onmessage = event => {
       if (ws !== socket) return;
       const message = JSON.parse(event.data);

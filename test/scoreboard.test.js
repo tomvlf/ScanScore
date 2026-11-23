@@ -44,7 +44,7 @@ test('podium shows the top three, highlights the leader and escapes names',()=>{
  assert.equal(box.classList.few,false);
 });
 
-async function scoreboard({savedSession=null,loginStatus=200}={}){
+async function scoreboard({savedSession=null,loginStatus=200,sessionResponse=null}={}){
  const elements=new Map(),sockets=[],requests=[],location={protocol:'https:',host:'quiz.example.test'};
  const document={
   querySelector(selector){
@@ -66,7 +66,7 @@ async function scoreboard({savedSession=null,loginStatus=200}={}){
  const browser=vm.createContext({document,location,WebSocket,fetch:async(url,options)=>{
   assert.equal(url,'/api/session');requests.push(options);
   const status=options.method==='GET'?(savedSession?200:401):loginStatus;
-  return {status,ok:status===200,json:async()=>savedSession||{roomName:'Family Quiz'}};
+  return {status,ok:status===200,json:async()=>sessionResponse||savedSession||{roomName:'Family Quiz'}};
  }});
  for(const file of ['scores.js','session.js','scoreboard.js'])vm.runInContext(fs.readFileSync('public/'+file,'utf8'),browser);
  await new Promise(setImmediate);
@@ -85,6 +85,14 @@ test('scoreboard uses room credentials, clears the password and opens a read-onl
  assert.equal($('#auth').classList.contains('hidden'),true);
  assert.equal($('#board').classList.contains('hidden'),false);
  assert.equal($('#logout').classList.contains('hidden'),false);
+});
+
+test('scoreboard uses the short-lived ticket from login for websocket authentication',async()=>{
+ const app=await scoreboard({sessionResponse:{roomName:'Family Quiz',socketTicket:'signed-ticket'}});
+ app.$('#roomName').value='Family Quiz';app.$('#secret').value='a long host password';
+ await app.$('#auth').onsubmit({preventDefault(){}});
+ app.sockets[0].onopen();
+ assert.deepEqual(app.sockets[0].messages,[{type:'auth',role:'display',socketTicket:'signed-ticket'}]);
 });
 
 test('scoreboard restores after reopening without a password and can log out',async()=>{

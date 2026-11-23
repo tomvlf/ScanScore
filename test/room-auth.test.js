@@ -19,10 +19,10 @@ function application({production=false,trustProxyHops=0}={}){
    if(sql.startsWith('INSERT INTO host_sessions')){
     const id='session-'+sessions.size;
     sessions.set(id,{id,room_id:values[0],token_hash:values[1],expires_at:Date.now()+(sql.includes('30 days')?30*24:8)*60*60e3});
-    return {rows:[{id}],rowCount:1};
+    return {rows:[{id,expires_at:new Date(sessions.get(id).expires_at)}],rowCount:1};
    }
    if(sql.includes('FROM host_sessions s JOIN rooms')){
-    const session=[...sessions.values()].find(s=>s.token_hash.equals(values[0])&&!s.revoked_at&&s.expires_at>Date.now());
+    const session=[...sessions.values()].find(s=>(sql.includes('s.id=$1')?s.id===values[0]:s.token_hash.equals(values[0]))&&!s.revoked_at&&s.expires_at>Date.now());
     const room=session&&[...rooms.values()].find(r=>r.id===session.room_id);
     return {rows:room?[{...room,session_id:session.id,session_expires_at:new Date(session.expires_at)}]:[],rowCount:room?1:0};
    }
@@ -135,6 +135,22 @@ test('persistent cookie restores both screens and logout revokes future access',
  assert.ok(sockets.every(socket=>socket.closed===4401));
  assert.equal((await app.request('GET','/api/session',{}, {cookie})).statusCode,401);
  await assert.rejects(app.authenticate({role:'host'},cookie),/denied/);
+});
+
+test('short-lived signed tickets authenticate sockets without a forwarded cookie',async()=>{
+ const app=application({production:true}),hostSecret='a long host password';
+ await app.create({roomName:'Family Quiz',hostSecret});
+ const login=await app.request('POST','/api/session',{roomName:'Family Quiz',secret:hostSecret});
+ assert.match(login.body.socketTicket,/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/);
+ for(const role of ['host','display']){
+  const auth=await app.authenticate({role,socketTicket:login.body.socketTicket},'');
+  assert.equal(auth.socket.authed,true);
+  assert.equal(auth.socket.role,role);
+ }
+ const tampered=login.body.socketTicket.slice(0,-1)+(login.body.socketTicket.endsWith('a')?'b':'a');
+ await assert.rejects(app.authenticate({role:'host',socketTicket:tampered},''),/denied/);
+ await app.request('DELETE','/api/session',{}, {cookie:login.headers['set-cookie']});
+ await assert.rejects(app.authenticate({role:'host',socketTicket:login.body.socketTicket},''),/denied/);
 });
 
 test('missing, forged and expired sessions cannot restore access',async()=>{
