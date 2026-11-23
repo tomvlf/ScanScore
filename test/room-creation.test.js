@@ -63,6 +63,12 @@ test('room creation rate limits explain when the user can retry',async()=>{
  assert.match($('#loginMessage').textContent,/Aanmelden|meld je aan/);
 });
 
+test('room creation explains when the database schema is not ready',async()=>{
+ const {$}=browser(async()=>({status:503,ok:false,json:async()=>({error:'temporarily_unavailable'})}));
+ await $('#create').onclick();
+ assert.match($('#loginMessage').textContent,/server of database is nog niet gereed/);
+});
+
 test('creating a room automatically signs in with the chosen name and password',async()=>{
  let request;
  const {$,sockets,sessionRequests}=browser(async(_url,options)=>{

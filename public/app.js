@@ -816,6 +816,8 @@ $('#create').onclick = async () => {
     if (!response.ok) {
       const message = response.status === 429
         ? 'Te veel ruimtecreatiepogingen. Wacht 15 seconden of meld je aan als de ruimte al bestaat.'
+        : response.status === 503
+          ? 'De server of database is nog niet gereed. Probeer over enkele ogenblikken opnieuw.'
         : response.status === 403
           ? 'Aanmelding geweigerd door de originbeveiliging. Controleer of je het juiste HTTPS-adres gebruikt.'
         : data.error === 'invalid_input'

@@ -337,6 +337,11 @@ async function revokeAllSessions(req,res,reqId){
   res.end('{"ok":true}');
  }catch(error){await c.query('ROLLBACK').catch(()=>{});throw error}finally{c.release()}
 }
+ async function schemaReady(c){
+  await c.query(`SELECT hs.socket_role,st.socket_role,la.key_hash
+   FROM host_sessions hs CROSS JOIN socket_tickets st CROSS JOIN login_attempts la
+   LIMIT 0`);
+ }
 async function createRoom(req,res,reqId){
  sec(res);
  if(!ORIGINS.includes(req.headers.origin)){res.writeHead(403);res.end('{"error":"origin_denied"}');return}
@@ -381,7 +386,9 @@ const server=http.createServer(async(req,res)=>{
   if(req.method==='POST'&&route==='/api/quizzes')return await quizSave(req,res,reqId);
   if(req.method==='DELETE'&&route.startsWith('/api/quizzes/'))return await quizDelete(req,res,reqId);
   if(req.method==='POST'&&route==='/api/rooms')return await createRoom(req,res,reqId);
-if(req.url==='/healthz'||req.url==='/readyz'){const c=await db.connect();try{await c.query('SELECT 1');sec(res);res.end('{"ok":true}')}finally{c.release()}return}let u=req.url.split('?')[0];if(u==='/')u='/index.html';if(u==='/vendor/html5-qrcode.min.js'){u='/vendor.js';const src=path.join(__dirname,'node_modules/html5-qrcode/html5-qrcode.min.js');sec(res,'text/javascript; charset=utf-8');return fs.createReadStream(src).pipe(res)}const f=path.normalize(path.join(PUBLIC,u));if(!f.startsWith(PUBLIC)){sec(res);res.writeHead(403);return res.end()}const types={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.webmanifest':'application/manifest+json; charset=utf-8','.png':'image/png','.svg':'image/svg+xml'};sec(res,types[path.extname(f)]||'application/octet-stream');fs.stat(f,(e,s)=>{if(e||!s.isFile()){res.writeHead(404);res.end()}else fs.createReadStream(f).pipe(res)})}catch(e){log('error','http_error',{reqId,message:e.code||e.message});if(!res.headersSent)sec(res);const status=e.code==='23505'?409:e.code==='RESOURCE_BUSY'?503:400;res.writeHead(status);res.end(status===503?'{"error":"temporarily_unavailable"}':'{"error":"request_failed"}')}});
+if(req.url==='/healthz'||req.url==='/readyz'){const c=await db.connect();try{if(req.url==='/readyz')await schemaReady(c);else await c.query('SELECT 1');sec(res);res.end('{"ok":true}')}catch(error){log('error','readiness_failed',{code:error.code||error.message});sec(res);res.writeHead(503);res.end('{"error":"schema_unavailable"}')}finally{c.release()}return}let u=req.url.split('?')[0];if(u==='/')u='/index.html';if(u==='/vendor/html5-qrcode.min.js'){u='/vendor.js';const src=path.join(__dirname,'node_modules/html5-qrcode/html5-qrcode.min.js');sec(res,'text/javascript; charset=utf-8');return fs.createReadStream(src).pipe(res)}const f=path.normalize(path.join(PUBLIC,u));if(!f.startsWith(PUBLIC)){sec(res);res.writeHead(403);return res.end()}const types={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.webmanifest':'application/manifest+json; charset=utf-8','.png':'image/png','.svg':'image/svg+xml'};sec(res,types[path.extname(f)]||'application/octet-stream');fs.stat(f,(e,s)=>{if(e||!s.isFile()){res.writeHead(404);res.end()}else fs.createReadStream(f).pipe(res)})}catch(e){log('error','http_error',{reqId,message:e.code||e.message});if(!res.headersSent)sec(res);const databaseUnavailable=/^(42|53|57)/.test(String(e.code||''))||['ECONNREFUSED','ETIMEDOUT','ENETUNREACH'].includes(e.code);
+ const status=e.code==='23505'?409:e.code==='RESOURCE_BUSY'||databaseUnavailable?503:400;
+ res.writeHead(status);res.end(status===503?'{"error":"temporarily_unavailable"}':'{"error":"request_failed"}')}});
 const wss=new WebSocketServer({noServer:true,maxPayload:16384,perMessageDeflate:false});server.on('upgrade',(req,sock,head)=>{const client=ip(req);if(!ORIGINS.includes(req.headers.origin)||limited(connections,client,8,60000)||new URL(req.url,'http://x').pathname!=='/ws'){sock.write('HTTP/1.1 403 Forbidden\r\n\r\n');return sock.destroy()}wss.handleUpgrade(req,sock,head,ws=>{ws.clientIp=client;wss.emit('connection',ws,req)})});
 async function auth(ws,m,req){
  if(m.type!=='auth'||!['host','display'].includes(m.role))throw Error('auth');
