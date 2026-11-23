@@ -23,7 +23,7 @@ test('quiz builder, image uploads and public question view are wired',()=>{
 test('feature matrix is non-empty and categorized',()=>{const m=JSON.parse(fs.readFileSync('test/feature-matrix.json'));assert.ok(Object.keys(m).length>=8);for(const [k,v] of Object.entries(m))assert.ok(v.length>0,`${k} empty`)});
 test('presentation surfaces expose podium, confirmation and display tools',()=>{
  for(const x of ['id="podium"','id="confirmDialog"','id="copyDisplay"','id="roomTitle"','id="returnToGame"'])has(html,x);
- for(const x of ['id="podium"','id="fullscreen"','id="boardEmpty"','id="footerInfo"'])has(board,x);
+ for(const x of ['id="podium"','id="fullscreen"','id="boardEmpty"','id="footerInfo"','id="boardHeadline"','id="stageFooter"','id="stageBackdrop"'])has(board,x);
  for(const x of ['renderPodium','score-meter'])has(scores,x);
- has(css,'.score-meter');
+ for(const x of ['.score-meter','.board.mode-question','.stage-backdrop'])has(css,x);
 });

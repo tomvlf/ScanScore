@@ -1504,17 +1504,18 @@ main {
 .board-title .eyebrow { color: #b6a6ff; }
 .board-title h1 {
   margin: .18rem 0 .3rem;
-  font-size: clamp(2.4rem, 5.4vw, 5.2rem);
-  line-height: .96;
-  letter-spacing: -.055em;
+  font-size: clamp(1.7rem, 3.2vw, 2.9rem);
+  line-height: 1;
+  letter-spacing: -.045em;
   font-weight: 900;
   background: linear-gradient(100deg, #fff 20%, #d9ccff 70%, #b9a6ff 100%);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
 }
-.board-title p { margin: 0; color: #a9a5c4; font-size: clamp(.82rem, 1.1vw, 1rem); }
-.board-title p b { color: #d6ccff; font-weight: 800; }
+.board-stats { margin: .3rem 0 0; color: #b6b1cf; font-size: clamp(.78rem, 1vw, .92rem); }
+.board-stats b { color: #d6ccff; font-weight: 800; }
+.board-room { margin: .35rem 0 0; color: #7e7b98; font-size: clamp(.68rem, .85vw, .78rem); letter-spacing: .02em; }
 
 .board-live { display: flex; align-items: center; gap: .55rem; flex-wrap: wrap; justify-content: flex-end; padding-bottom: .35rem; }
 .live-chip {
@@ -1878,6 +1879,86 @@ main {
 }
 .stage-meta { margin: 0; color: #a9a5c4; font-size: clamp(.8rem, 1.1vw, 1rem); font-variant-numeric: tabular-nums; }
 .question-stage.empty h2 { max-width: 34ch; font-size: clamp(1.2rem, 2.4vw, 2rem); color: #c9c4e2; }
+
+/* Question mode uses the full stage: the question and image are the content. */
+.board.mode-question { gap: 0; height: calc(100svh - 140px); min-height: 0; }
+.board.mode-question .board-head,
+.board.mode-question .board-controls,
+.board.mode-question .board-footer { display: none; }
+.board.mode-question .question-stage {
+  grid-template-rows: auto minmax(0, 1fr) auto auto;
+  width: 100%;
+  max-width: none;
+  height: 100%;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  gap: clamp(.65rem, 1.3vw, 1.15rem);
+  text-align: center;
+}
+.board.mode-question .question-stage.no-media { grid-template-rows: auto minmax(0, 1fr) auto; }
+.board.mode-question .question-stage.no-media .stage-media { display: none; }
+.stage-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  width: 100%;
+  text-align: left;
+}
+.stage-top .eyebrow { color: #b6a6ff; }
+.board.mode-question .stage-media {
+  position: relative;
+  height: 100%;
+  max-height: none;
+  min-height: 0;
+  border-radius: clamp(18px, 2.4vw, 30px);
+  background:
+    radial-gradient(900px 400px at 50% 0%, rgba(122, 100, 255, .2), transparent 72%),
+    rgba(255, 255, 255, .025);
+  box-shadow: 0 36px 100px rgba(0, 0, 0, .42);
+}
+.board.mode-question .stage-media img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  max-width: 100%;
+  max-height: none;
+  object-fit: contain;
+}
+.board.mode-question .stage-media .stage-backdrop {
+  object-fit: cover;
+  transform: scale(1.08);
+  filter: blur(28px) saturate(1.15) brightness(.48);
+  opacity: .9;
+}
+.board.mode-question .stage-media #stageImage { z-index: 1; }
+.board.mode-question .question-stage h2 {
+  max-width: 34ch;
+  margin-inline: auto;
+  font-size: clamp(1.8rem, 4.2vw, 4rem);
+  line-height: 1.05;
+  letter-spacing: -.045em;
+}
+.stage-meta {
+  margin: 0;
+  padding: .28rem .65rem;
+  border: 1px solid rgba(255, 255, 255, .1);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .04);
+  color: #cbbdff;
+  font-size: clamp(.7rem, .9vw, .8rem);
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.stage-footer {
+  margin: 0;
+  color: #807d9c;
+  font-size: clamp(.68rem, .9vw, .82rem);
+  letter-spacing: .02em;
+}
 /* ---------- Responsive ---------- */
 
 @media (max-width: 1050px) {
@@ -1996,6 +2077,11 @@ main {
   .editor-question-actions { justify-content: flex-end; }
   .quiz-editor-foot { align-items: flex-start; flex-direction: column; }
   .stage-media, .stage-media img { max-height: 40vh; }
+  .board.mode-question { height: calc(100svh - 92px); min-height: 0; }
+  .board.mode-question .question-stage { height: 100%; min-height: 0; }
+  .board.mode-question .question-stage h2 { font-size: clamp(1.45rem, 6.4vw, 2.2rem); }
+  .board.mode-question .stage-media { border-radius: 16px; }
+  .stage-top { gap: .5rem; }
 
   .pagehead { margin-bottom: 14px; }
   .pagehead h1 { font-size: 1.85rem; }

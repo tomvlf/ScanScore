@@ -321,8 +321,9 @@ vernieuwen of heropenen aangemeld. Het scorebord kan
 geen deelnemers of scores wijzigen. Kies **Totaalpunten** of **Punten per vraag** en selecteer desgewenst een
 eerder spel. De quizmaster kiest op **Spelen** tussen **Klassement** en
 **Vraag + beeld**. Het publieke scherm volgt die keuze direct, ook op een ander
-toestel. In de vraagweergave staat de actieve vraag met afbeelding groot in
-beeld en wisselt ze automatisch mee met de volgende vraag.
+toestel. In de vraagweergave vullen de afbeelding en vraag het volledige
+scherm; de ruimtenaam, het aantal deelnemers en het aantal vragen staan klein
+onderaan. De vraag wisselt automatisch mee met de volgende vraag.
 
 Het gedeelde wachtwoord geeft ook toegang tot de spelbediening: deel het alleen
 met vertrouwde personen. Wachtwoorden worden niet langer rechtstreeks op de

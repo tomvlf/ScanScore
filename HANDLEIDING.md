@@ -26,7 +26,9 @@ spel gekopieerd. Later bewerken of verwijderen van de quiz verandert lopende of
 afgesloten sessies niet. Een quiz blijft herbruikbaar voor nieuwe sessies. Het
 quizmaster kiest op het bedieningsscherm tussen **Klassement** en
 **Vraag + beeld**. Het publieke scherm volgt die keuze via de ruimte, ook op een
-ander toestel, en wisselt automatisch mee naar de volgende vraag.
+ander toestel, en wisselt automatisch mee naar de volgende vraag. De
+vraagweergave vult het scherm; de ruimtenaam staat klein onder de vraag- en
+deelnemersinfo.
 
 ## Spellen en punten
 Per ruimte kan één spel tegelijk actief zijn. Bij een quizsessie komen de punten

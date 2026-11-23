@@ -64,9 +64,10 @@
   <section id="board" class="board hidden">
     <div class="board-head">
       <div class="board-title">
-        <span class="eyebrow">Live klassement</span>
-        <h1 id="title"></h1>
-        <p id="gameInfo"></p>
+        <span class="eyebrow" id="boardEyebrow">Live klassement</span>
+        <h1 id="boardHeadline">Klassement</h1>
+        <p id="gameInfo" class="board-stats"></p>
+        <p id="title" class="board-room"></p>
       </div>
       <div class="board-live">
         <span class="live-chip">Live</span>
@@ -80,10 +81,13 @@
     </div>
 
     <section id="questionStage" class="question-stage hidden" aria-live="polite">
-      <span class="eyebrow" id="stageEyebrow">Huidige vraag</span>
-      <div id="stageMedia" class="stage-media hidden"><img id="stageImage" alt=""></div>
+      <div class="stage-top">
+        <span class="eyebrow" id="stageEyebrow">Huidige vraag</span>
+        <span id="stageMeta" class="stage-meta"></span>
+      </div>
+      <div id="stageMedia" class="stage-media hidden"><img id="stageBackdrop" class="stage-backdrop" alt="" aria-hidden="true"><img id="stageImage" alt=""></div>
       <h2 id="stagePrompt"></h2>
-      <p id="stageMeta" class="stage-meta"></p>
+      <p id="stageFooter" class="stage-footer"></p>
     </section>
     <div id="podium" class="podium" aria-label="Top drie"></div>
     <ol id="scoreList" class="scorelist boardlist" aria-label="Klassement"></ol>

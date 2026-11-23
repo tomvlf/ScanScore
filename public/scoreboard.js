@@ -23,21 +23,24 @@ function render(next) {
   $('#title').textContent = next.title;
 
   const game = next.game;
+  const players = next.players || [];
   const scoreView = $('#scoreView').value || 'total';
   const questionView = next.displayMode === 'question';
   const view = questionView ? 'question' : scoreView;
   if (!questionView && scoreView !== $('#scoreView').value) $('#scoreView').value = scoreView;
+  $('#board').classList.toggle('mode-question', questionView);
+  $('#board').classList.toggle('mode-scores', !questionView);
   $('.board-controls').classList.toggle('hidden', questionView);
 
   const current = game?.questions?.find(question => question.ordinal === game.question);
   const winners = current?.winners?.length || 0;
-  const quizLabel = game?.quizTitle ? `${game.quizTitle} · ` : '';
+  const questionCount = game?.questions?.length || 0;
   const ofTotal = game?.questionCount ? ` van ${game.questionCount}` : '';
+  $('#boardHeadline').textContent = game?.quizTitle || 'Klassement';
+  $('#boardEyebrow').textContent = questionView ? 'Vraag' : 'Live klassement';
   $('#gameInfo').textContent = game
-    ? `${quizLabel}${game.endedAt ? 'Gestopt spel' : 'Actief spel'} · Vraag ${game.question}${ofTotal}${winners ? ` · ${winners} ${winners === 1 ? 'winnaar' : 'winnaars'}` : ''}`
+    ? `${game.endedAt ? 'Gestopt' : 'Actief'} · ${players.length} ${players.length === 1 ? 'deelnemer' : 'deelnemers'} · ${questionCount} ${questionCount === 1 ? 'vraag' : 'vragen'} · Vraag ${game.question}${ofTotal}${winners ? ` · ${winners} ${winners === 1 ? 'winnaar' : 'winnaars'}` : ''}`
     : 'Nog geen spel gestart';
-
-  const players = next.players || [];
   renderPodium(next, $('#podium'));
   $('#podium').classList.toggle('hidden', questionView || view !== 'total' || !players.length);
 
@@ -66,27 +69,35 @@ function render(next) {
 
 function renderQuestionStage(next, game, question) {
   const stage = $('#questionStage');
+  const players = next.players || [];
+  const questionCount = game?.questions?.length || 0;
   const hasQuestion = !!(game && question && (question.prompt || question.imageId));
   const hasImage = !!(question && question.imageId);
   stage.classList.toggle('empty', !hasQuestion);
-  $('#stageEyebrow').textContent = game?.quizTitle ? `${game.quizTitle} · Vraag ${question?.ordinal || game.question}` : 'Huidige vraag';
+  stage.classList.toggle('no-media', !hasImage);
+  const questionNumber = question?.ordinal || game?.question || 0;
+  $('#stageEyebrow').textContent = game ? `${game.quizTitle ? `${game.quizTitle} · ` : ''}Vraag ${questionNumber}${game.questionCount ? ` van ${game.questionCount}` : ''}` : 'Huidige vraag';
   $('#stageMedia').classList.toggle('hidden', !hasImage);
   if (hasImage) {
     $('#stageMedia').classList.remove('hidden');
-    const image = $('#stageImage');
+    const image = $('#stageImage'), backdrop = $('#stageBackdrop');
     const src = question.imageUrl || `/api/images/${question.imageId}`;
     if (!image.getAttribute || image.getAttribute('src') !== src) {
       image.src = src;
       image.alt = question.prompt || 'Vraagafbeelding';
+      if (backdrop) backdrop.src = src;
     }
   }
   if (hasQuestion) {
     $('#stagePrompt').textContent = question.prompt || '';
-    $('#stageMeta').textContent = `Vraag ${question.ordinal}${game.questionCount ? ` van ${game.questionCount}` : ''} · ${formatPoints(question.points)} punten`;
+    $('#stageMeta').textContent = `${formatPoints(question.points)} punten`;
   } else {
     $('#stagePrompt').textContent = game ? 'Deze sessie heeft nog geen vraag om te tonen.' : 'Er is nog geen spel gestart.';
-    $('#stageMeta').textContent = game ? 'Start een quiz met vragen om ze hier groot te tonen.' : 'Zodra de quizmaster start, verschijnt de vraag hier.';
+    $('#stageMeta').textContent = '';
   }
+  $('#stageFooter').textContent = game
+    ? `${next.title} · ${players.length} ${players.length === 1 ? 'deelnemer' : 'deelnemers'} · ${questionCount} ${questionCount === 1 ? 'vraag' : 'vragen'}`
+    : next.title;
 }
 
 $('#stageImage').onerror = () => $('#stageMedia').classList.add('hidden');
