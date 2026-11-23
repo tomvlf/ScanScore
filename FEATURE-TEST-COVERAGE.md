@@ -59,7 +59,7 @@ Voer deze extra integratietest lokaal uit met Docker/PostgreSQL:
 
 Voer ook deze test lokaal uit met Docker/PostgreSQL:
 
-`npm run test:privileges` controleert met de echte runtimegebruiker dat normale DML werkt en dat onder meer `CREATE`, `ALTER`, `DROP`, `TRUNCATE`, schema-migraties en beheerdersrollen niet beschikbaar zijn.
+`npm run test:privileges` controleert met de echte runtimegebruiker dat normale DML werkt en dat onder meer `CREATE`, `ALTER`, `DROP`, `TRUNCATE` en beheerdersrollen niet beschikbaar zijn.
 
 ## Lokaal uitvoeren
 

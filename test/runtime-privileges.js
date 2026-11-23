@@ -17,10 +17,9 @@ async function denied(sql){try{await client.query(sql);throw new Error(`Unexpect
  has_table_privilege(current_user,'rooms','DELETE') delete_rooms,
  has_table_privilege(current_user,'rooms','TRUNCATE') truncate_rooms,
  has_table_privilege(current_user,'rooms','REFERENCES') references_rooms,
- has_table_privilege(current_user,'rooms','TRIGGER') trigger_rooms,
- has_table_privilege(current_user,'schema_migrations','SELECT') read_migrations`)).rows[0];
+ has_table_privilege(current_user,'rooms','TRIGGER') trigger_rooms`)).rows[0];
  for(const k of ['connect','usage','select_rooms','insert_rooms','update_rooms','delete_rooms'])assert.equal(checks[k],true,`${k} should be true`);
- for(const k of ['create_schema','truncate_rooms','references_rooms','trigger_rooms','read_migrations'])assert.equal(checks[k],false,`${k} should be false`);
+ for(const k of ['create_schema','truncate_rooms','references_rooms','trigger_rooms'])assert.equal(checks[k],false,`${k} should be false`);
  await client.query('BEGIN');await client.query("INSERT INTO audit_events(severity,event_type,outcome,correlation_id,metadata) VALUES('info','runtime_privilege_test','ok',gen_random_uuid(),'{}')");await client.query('ROLLBACK');
  await denied('CREATE TABLE runtime_forbidden(id integer)');
  await denied('TRUNCATE rooms');

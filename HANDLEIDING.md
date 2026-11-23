@@ -7,8 +7,12 @@
 4. Publiceer uitsluitend `127.0.0.1:8088` via een HTTPS-reverse-proxy met WebSocket-upgrade.
 5. Open `/healthz` en controleer de container-healthchecks.
 
-## PostgreSQL-migratie
-De migraties gebruiken een PostgreSQL advisory lock en worden door de eenmalige `migrate`-service uitgevoerd. Spelstarts, spelers en QR-koppelingen blijven aan hun ruimte gekoppeld. `SELECT ... FOR UPDATE` serialiseert wijzigingen binnen één quizruimte. Een UUID-idempotency key voorkomt dat dezelfde scanrequest tweemaal wordt verwerkt.
+## PostgreSQL-initialisatie
+Elke release initialiseert een nieuwe `pgdata_v2`-volume met één volledig
+eindtoestandsschema uit `postgres-init/`. Er is geen migratieservice en
+bestaande volumendata wordt niet hergebruikt. `SELECT ... FOR UPDATE`
+serialiseert wijzigingen binnen één quizruimte. Een UUID-idempotency key
+voorkomt dat dezelfde scanrequest tweemaal wordt verwerkt.
 
 ## Quizzen en afbeeldingen
 Een ruimte kan meerdere quizzes bevatten. Elke quiz bestaat uit vragen met een

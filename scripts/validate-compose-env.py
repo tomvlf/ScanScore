@@ -2,7 +2,6 @@ import json,sys
 cfg=json.load(sys.stdin); services=cfg['services']
 expected={
 'db':{'POSTGRES_PASSWORD','DB_RUNTIME_PASSWORD'},
-'migrate':{'DATABASE_URL'},
 'app':{'DATABASE_URL','SECRET_PEPPER','QR_ENCRYPTION_KEY'},
 'privilege-test':{'DATABASE_URL'},
 'functional-test':set()}
@@ -13,14 +12,8 @@ for svc,want in expected.items():
     if any(not env[x] for x in want): raise SystemExit(f'{svc}: empty environment variable')
     if any(k.endswith('_FILE') for k in env): raise SystemExit(f'{svc}: file-based secret variable found')
 if 'secrets' in cfg: raise SystemExit('Compose must not configure file-based secrets')
-if 'OWNER_DATABASE_URL' in services['app'].get('environment',{}):
-    raise SystemExit('app must never receive owner credentials')
-if 'RUNTIME_DATABASE_URL' in services['migrate'].get('environment',{}):
-    raise SystemExit('migrate must not receive runtime credentials')
 if 'scanscore_runtime:' not in services['app']['environment']['DATABASE_URL']:
     raise SystemExit('app must receive the runtime database URL')
-if 'scanscore_owner:' not in services['migrate']['environment']['DATABASE_URL']:
-    raise SystemExit('migrate must receive the owner database URL')
 if services['db'].get('ports'): raise SystemExit('database must not publish ports')
 if not cfg.get('networks',{}).get('backend',{}).get('internal'): raise SystemExit('backend network must be internal')
 print('Compose environment validation passed')

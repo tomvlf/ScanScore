@@ -4,7 +4,7 @@
 
 - Applicatie: `server.js`, `public/`, `package.json`, `package-lock.json`
 - Container: `Dockerfile`, `compose.yml`, `.dockerignore`
-- Database: `migrations/`, `postgres-init/`
+- Database: `postgres-init/` met één eindtoestandsschema voor nieuwe volumes
 - Installatie: `.env.example`, `scripts/generate-secrets.sh`, `scripts/preflight.sh`
 - Tests: `test/`, `scripts/test-runtime-privileges.sh`
 - Operaties: `scripts/backup.sh`, healthchecks en checklist

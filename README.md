@@ -31,11 +31,10 @@ ScoreScan is een selfhosted webapp voor quizzen, spellen en activiteiten waarbij
 
 ## Opbouw
 
-ScoreScan bestaat uit vier services:
+ScoreScan gebruikt twee productieservices:
 
 - **app**: de webinterface en server-authoritative spellogica;
 - **db**: PostgreSQL voor spelruimtes, deelnemers, score-events en auditgegevens;
-- **migrate**: voert databasewijzigingen uit met een afzonderlijke owner-gebruiker;
 - **privilege-test**: controleert dat de runtimegebruiker geen schemawijzigingen kan uitvoeren.
 
 De applicatie gebruikt een afzonderlijke, beperkt bevoegde databasegebruiker. PostgreSQL is alleen bereikbaar via het interne Docker-netwerk.
@@ -148,7 +147,7 @@ docker compose up -d --build
 ```
 
 Voer bij een nieuwe shell opnieuw `export COMPOSE_FILE=compose.yml:compose.ghcr.example.yml`
-uit als je de gepubliceerde images gebruikt. Zo gebruiken ook de migratie- en testservices
+uit als je de gepubliceerde images gebruikt. Zo gebruikt ook de testservice
 dezelfde image zonder lokale build.
 
 Bekijk daarna de toestand:
@@ -160,13 +159,12 @@ docker compose ps
 Verwacht resultaat:
 
 - `db` wordt **healthy**;
-- `migrate` eindigt succesvol met exitcode `0`;
 - `app` wordt **healthy**.
 
 Logs bekijken:
 
 ```bash
-docker compose logs -f app db migrate
+docker compose logs -f app db
 ```
 
 ## 6. Databasebeperkingen testen
@@ -425,22 +423,24 @@ Gebruik één exact HTTPS-adres zonder wildcard of slash op het einde:
 ALLOWED_ORIGINS=https://quiz.jouwdomein.be
 ```
 
-## De migratieservice stopt
+## De database initialiseert niet
 
-Bekijk de migratielogs:
+Bekijk de databaselogs:
 
 ```bash
-docker compose logs migrate
+docker compose logs db
 ```
 
-Start de app niet met handmatig verruimde databaserechten. Los eerst de migratiefout op.
+De app gebruikt alleen een lege releasevolume. Verwijder of vervang de
+releasevolume als opnieuw initialiseren gewenst is; oude appdata wordt dan
+verwijderd.
 
 ## De privilegetest mislukt
 
 Voer uit:
 
 ```bash
-docker compose logs db migrate
+docker compose logs db
 docker compose --profile test run --rm privilege-test
 ```
 
@@ -472,8 +472,7 @@ Belangrijke mappen:
 
 ```text
 public/          browserinterface en quizbouwer
-migrations/      PostgreSQL-schemawijzigingen (inclusief quizafbeeldingen)
-postgres-init/   eenmalige veilige database-initialisatie
+postgres-init/   volledig schema voor een nieuwe release-database
 scripts/         installatie-, test- en beheerhulpmiddelen
 test/            statische en integratietests
 .github/         CI, containerrelease en Dependabot

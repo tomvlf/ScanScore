@@ -9,8 +9,7 @@
 
 ## 2. Bronbestanden controleren
 - [ ] Production v7 plus deze v7.2-bestanden staan in één map.
-- [ ] `migrations/001_init.sql` en `002_runtime_permissions.sql` zijn aanwezig.
-- [ ] `postgres-init/001-security.sql` en `002-runtime-role.sh` zijn uitvoerbaar/leesbaar.
+- [ ] `postgres-init/001-security.sql`, `002-runtime-role.sh` en `003-schema.sql` zijn aanwezig.
 - [ ] `.env`, dumps en back-ups staan in `.gitignore`.
 - [ ] Images en npm-dependencies zijn vastgezet en gescand in CI.
 
@@ -25,14 +24,14 @@
 - [ ] Voer `./scripts/preflight.sh` uit.
 - [ ] `docker compose config --quiet` slaagt.
 - [ ] De app ontvangt geen ownercredential.
-- [ ] De migratieservice ontvangt geen runtimecredential.
+- [ ] Er is geen migratieservice; alleen PostgreSQL initialiseert het schema.
 - [ ] De database publiceert geen poort.
 - [ ] Het backendnetwerk is intern.
 
 ## 5. Eerste start
 - [ ] Start `docker compose up -d --build`.
 - [ ] Controleer `docker compose ps`.
-- [ ] De migratieservice eindigt succesvol met exitcode 0.
+- [ ] PostgreSQL initialiseert de nieuwe `pgdata_v2`-volume succesvol.
 - [ ] Database en app worden healthy.
 - [ ] `/readyz` retourneert succes via localhost/reverse proxy.
 - [ ] Controleer logs op fouten zonder secrets in de output.
@@ -42,7 +41,6 @@
 - [ ] De test bevestigt de rol `scanscore_runtime`.
 - [ ] DML-rechten op applicatietabellen werken.
 - [ ] CREATE, ALTER, DROP, TRUNCATE, REFERENCES en TRIGGER worden geweigerd.
-- [ ] `schema_migrations` is niet leesbaar.
 - [ ] De rol is geen superuser en heeft geen CREATEDB, CREATEROLE, REPLICATION of BYPASSRLS.
 
 ## 7. Reverse proxy en TLS

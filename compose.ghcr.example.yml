@@ -1,7 +1,4 @@
 services:
-  migrate:
-    image: ghcr.io/tomvlf/scanscore:${SCANSCORE_IMAGE_TAG:-latest}
-    build: !reset null
   app:
     image: ghcr.io/tomvlf/scanscore:${SCANSCORE_IMAGE_TAG:-latest}
     build: !reset null

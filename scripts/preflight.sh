@@ -5,7 +5,7 @@ ok(){ echo "OK: $*"; }
 command -v docker >/dev/null 2>&1 || fail 'Docker is not installed'
 docker compose version >/dev/null 2>&1 || fail 'Docker Compose v2 is unavailable'
 [ -f .env ] || fail '.env is missing; run scripts/generate-secrets.sh'
-for key in DB_OWNER_PASSWORD DB_RUNTIME_PASSWORD OWNER_DATABASE_URL RUNTIME_DATABASE_URL SECRET_PEPPER QR_ENCRYPTION_KEY; do
+for key in DB_OWNER_PASSWORD DB_RUNTIME_PASSWORD RUNTIME_DATABASE_URL SECRET_PEPPER QR_ENCRYPTION_KEY; do
   grep -Eq "^${key}=.+$" .env || fail "$key is missing or empty in .env"
 done
 grep -Eq '^DB_OWNER_PASSWORD=[A-Fa-f0-9]{64,}$' .env || fail 'owner password must be at least 64 hexadecimal characters'

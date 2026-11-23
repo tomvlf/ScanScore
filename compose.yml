@@ -10,7 +10,7 @@ services:
       DB_RUNTIME_PASSWORD: ${DB_RUNTIME_PASSWORD:?Set DB_RUNTIME_PASSWORD in .env}
       POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256 --auth-local=scram-sha-256
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - pgdata_v2:/var/lib/postgresql/data
       - ./postgres-init:/docker-entrypoint-initdb.d:ro
     networks: [backend]
     healthcheck:
@@ -26,25 +26,11 @@ services:
     cap_drop: [ALL]
     cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETGID, SETUID]
 
-  migrate:
-    build: .
-    command: ["node", "scripts/migrate.js"]
-    depends_on:
-      db: {condition: service_healthy}
-    environment:
-      DATABASE_URL: ${OWNER_DATABASE_URL:?Set OWNER_DATABASE_URL in .env}
-    networks: [backend]
-    restart: "no"
-    read_only: true
-    tmpfs: ["/tmp:size=16m,noexec,nosuid,nodev"]
-    security_opt: [no-new-privileges:true]
-    cap_drop: [ALL]
-
   app:
     build: .
     restart: unless-stopped
     depends_on:
-      migrate: {condition: service_completed_successfully}
+      db: {condition: service_healthy}
     environment:
       NODE_ENV: production
       DATABASE_URL: ${RUNTIME_DATABASE_URL:?Set RUNTIME_DATABASE_URL in .env}
@@ -87,7 +73,7 @@ services:
     profiles: [test]
     command: ["node", "test/runtime-privileges.js"]
     depends_on:
-      migrate: {condition: service_completed_successfully}
+      db: {condition: service_healthy}
     environment:
       DATABASE_URL: ${RUNTIME_DATABASE_URL:?Set RUNTIME_DATABASE_URL in .env}
     networks: [backend]
@@ -96,6 +82,6 @@ services:
     security_opt: [no-new-privileges:true]
     cap_drop: [ALL]
 
-volumes: {pgdata: {}}
+volumes: {pgdata_v2: {}}
 networks:
   backend: {internal: true}

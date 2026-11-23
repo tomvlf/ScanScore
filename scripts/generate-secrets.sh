@@ -9,7 +9,6 @@ cat > .env <<EOT
 ALLOWED_ORIGINS=https://quiz.example.be
 DB_OWNER_PASSWORD=$owner
 DB_RUNTIME_PASSWORD=$runtime
-OWNER_DATABASE_URL=postgresql://scanscore_owner:$owner@db:5432/scanscore
 RUNTIME_DATABASE_URL=postgresql://scanscore_runtime:$runtime@db:5432/scanscore
 SECRET_PEPPER=$pepper
 QR_ENCRYPTION_KEY=$qr
