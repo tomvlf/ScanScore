@@ -7,6 +7,7 @@ const $$ = s => [...document.querySelectorAll(s)];
 
 let ws, state, scanner, pairScanner, lastScan = '', lastAt = 0, lastQuestionId;
 let cameraTask = Promise.resolve();
+let draftQuiz = null, quizSaving = false;
 
 /* ---------- Small helpers ---------- */
 
@@ -85,6 +86,8 @@ function confetti() {
   }
 }
 
+$('#questionImage').onerror = () => { $('#questionMedia').classList.add('hidden'); $('#currentQuestion').classList.add('no-media'); };
+
 /* ---------- Navigation ---------- */
 
 function page(name) {
@@ -144,13 +147,17 @@ function render() {
     lastAt = 0;
   }
 
+  const lastQuestion = !!(game?.questionCount && game.question >= game.questionCount);
   $('#play').classList.toggle('is-playing', editable);
   $('#playActions').classList.toggle('hidden', !editable);
-  $('#nextHint').textContent = winners.length ? `${winners.length} ${winners.length === 1 ? 'winnaar' : 'winnaars'} gescand` : 'Klaar met scannen?';
+  $('#nextHint').textContent = winners.length ? `${winners.length} ${winners.length === 1 ? 'winnaar' : 'winnaars'} gescand` : lastQuestion ? 'Laatste vraag' : 'Klaar met scannen?';
+  if ($('#nextLabel')) $('#nextLabel').textContent = lastQuestion ? 'Quiz afronden' : 'Volgende vraag';
   if ($('#nextSub')) {
-    $('#nextSub').textContent = winners.length
-      ? `${formatPoints(question.points / winners.length)} punten per winnaar · volgende vraag begint leeg`
-      : 'De volgende vraag begint met een lege winnaarslijst.';
+    $('#nextSub').textContent = lastQuestion
+      ? 'Rond de quiz af wanneer alle winnaars gescand zijn.'
+      : winners.length
+        ? `${formatPoints(question.points / winners.length)} punten per winnaar · volgende vraag begint leeg`
+        : 'De volgende vraag begint met een lege winnaarslijst.';
   }
   $('#gameForm').classList.toggle('hidden', !!state.activeGameId);
   $('#gameControls').classList.toggle('hidden', !game);
@@ -158,10 +165,14 @@ function render() {
   $('.play-meta').classList.toggle('hidden', !game);
   $('#reader').classList.toggle('hidden', !editable);
   $('#playTitle').textContent = game ? `${editable ? '' : 'Gestopt spel · '}Vraag ${game.question}` : 'Nog geen spel';
+  const quizPrefix = game?.quizTitle ? `Quiz “${game.quizTitle}” · ` : '';
   $('#gameStatus').textContent = game
-    ? (game.legacy ? 'Historische scores uit de vorige versie.' : game.endedAt ? 'Dit spel is gestopt. De scores blijven bewaard.' : 'Scan alle winnaars en ga daarna naar de volgende vraag.')
+    ? (game.legacy ? 'Historische scores uit de vorige versie.' : game.endedAt ? 'Dit spel is gestopt. De scores blijven bewaard.' : `${quizPrefix}Scan alle winnaars en ga daarna naar de volgende vraag.`)
     : 'Voeg spelers toe en start een spel.';
-  $('#questionSelect').innerHTML = (game?.questions || []).map(q => `<option value="${q.id}">${esc(q.label || 'Vraag ' + q.ordinal)}</option>`).join('');
+  $('#questionSelect').innerHTML = (game?.questions || []).map(q => {
+    const prompt = q.prompt ? ' · ' + q.prompt.slice(0, 48) : '';
+    return `<option value="${q.id}">${esc((q.label || 'Vraag ' + q.ordinal) + prompt)}</option>`;
+  }).join('');
   $('#questionSelect').value = question?.id || '';
   $('#questionSelect').disabled = !editable;
   $('#previous').disabled = !editable || game.question === 1;
@@ -210,12 +221,16 @@ function render() {
   const selected = $('#gameHistory').value;
   $('#gameHistory').innerHTML = state.games.map((entry, index) => {
     const date = new Date(entry.startedAt).toLocaleString('nl-BE', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
-    return `<option value="${entry.id}">${esc(entry.legacy ? 'Oude scores' : `Spel ${state.games.length - index}`)} · ${esc(date)}${entry.endedAt ? ' (gestopt)' : ' (actief)'}</option>`;
+    const name = entry.legacy ? 'Oude scores' : entry.quizTitle ? entry.quizTitle : `Spel ${state.games.length - index}`;
+    return `<option value="${entry.id}">${esc(name)} · ${esc(date)}${entry.endedAt ? ' (gestopt)' : ' (actief)'}</option>`;
   }).join('');
   $('#gameHistory').value = state.games.some(entry => entry.id === selected) ? selected : game?.id || '';
   $('#viewGame').disabled = !state.games.length;
 
   renderScoreViews();
+  renderQuizPicker();
+  renderCurrentQuestion(game, question);
+  renderQuizList();
 
   if ($('#displayUrl')) $('#displayUrl').textContent = displayUrl();
   for (const id of ['display', 'displayTop', 'displayMore']) $('#' + id).href = '/scoreboard.html';
@@ -223,6 +238,415 @@ function render() {
 
   if (scanner && !editable) cameraAction(stopCameras).catch(error => feedback('error', 'Camera kon niet stoppen', cameraError(error)));
 }
+
+function renderQuizPicker() {
+  const select = $('#quizSelect');
+  if (!select) return;
+  const previous = select.value;
+  const quizzes = state?.quizzes || [];
+  select.innerHTML = '<option value="">Snel spel zonder quiz</option>' + quizzes.map(quiz =>
+    `<option value="${quiz.id}">${esc(quiz.title)} · ${quiz.questions.length} ${quiz.questions.length === 1 ? 'vraag' : 'vragen'}</option>`
+  ).join('');
+  select.value = quizzes.some(quiz => quiz.id === previous) ? previous : '';
+  updateGameFormMode();
+}
+
+function updateGameFormMode() {
+  const select = $('#quizSelect');
+  if (!select) return;
+  const quiz = (state?.quizzes || []).find(entry => entry.id === select.value);
+  $('#gameForm').classList.toggle('quiz-mode', !!quiz);
+  $('#pointsField').classList.toggle('hidden', !!quiz);
+  $('#presets').classList.toggle('hidden', !!quiz);
+  const points = $('#pointsPerQuestion');
+  points.disabled = !!quiz;
+  points.required = !quiz;
+  $('#startGameLabel').textContent = quiz ? 'Quiz starten' : 'Spel starten';
+  if (quiz) {
+    const total = quiz.questions.reduce((sum, question) => sum + question.points, 0);
+    $('#quizHint').textContent = `${quiz.questions.length} ${quiz.questions.length === 1 ? 'vraag' : 'vragen'} · ${formatPoints(total)} punten in totaal. De punten per vraag komen uit de quiz.`;
+  } else {
+    $('#quizHint').textContent = (state?.quizzes || []).length
+      ? 'Kies een quiz, of laat dit leeg voor een snel spel zonder voorbereide vragen.'
+      : 'Nog geen quizzen. Maak er een via Quizzen, of start hier een snel spel.';
+  }
+}
+
+function renderCurrentQuestion(game, question) {
+  const box = $('#currentQuestion');
+  if (!box) return;
+  const hasContent = !!(game && question && (question.prompt || question.imageId));
+  box.classList.toggle('hidden', !hasContent);
+  if (!hasContent) return;
+  const hasImage = !!question.imageId;
+  box.classList.toggle('no-media', !hasImage);
+  $('#questionMedia').classList.toggle('hidden', !hasImage);
+  $('#questionLabel').textContent = `Vraag ${question.ordinal}${game.questionCount ? ` van ${game.questionCount}` : ''}`;
+  $('#questionPrompt').textContent = question.prompt || '';
+  $('#questionMeta').textContent = [game.quizTitle, `${formatPoints(question.points)} punten`, game.endedAt ? 'gestopt' : ''].filter(Boolean).join(' · ');
+  if (hasImage) {
+    $('#questionMedia').classList.remove('hidden');
+    const image = $('#questionImage');
+    const src = question.imageUrl || `/api/images/${question.imageId}`;
+    if (!image.getAttribute || image.getAttribute('src') !== src) {
+      image.src = src;
+      image.alt = question.prompt || 'Vraagafbeelding';
+    }
+  }
+}
+
+function renderQuizList() {
+  const box = $('#quizList');
+  if (!box) return;
+  const quizzes = state?.quizzes || [];
+  box.innerHTML = quizzes.length
+    ? quizzes.map(quiz => {
+        const questions = quiz.questions || [];
+        const total = questions.reduce((sum, question) => sum + question.points, 0);
+        const thumbs = questions.slice(0, 4).map(question => {
+          const src = question.thumbUrl || question.imageUrl;
+          return src ? `<img src="${esc(src)}" alt="" loading="lazy" decoding="async">` : '';
+        }).join('');
+        const extra = questions.length > 4 ? `<span class="more-thumb">+${questions.length - 4}</span>` : '';
+        const updated = quiz.updatedAt ? new Date(quiz.updatedAt).toLocaleDateString('nl-BE', { day: '2-digit', month: 'short' }) : '';
+        return `<article class="quiz-card">
+          <div class="quiz-card-head">
+            <div><h2>${esc(quiz.title)}</h2><p class="quiz-card-meta">${questions.length} ${questions.length === 1 ? 'vraag' : 'vragen'} · ${formatPoints(total)} punten${updated ? ` · ${esc(updated)}` : ''}</p></div>
+            <div class="quiz-card-tools"><button class="icon-button danger" type="button" data-delete-quiz="${quiz.id}" aria-label="${esc(quiz.title)} verwijderen" title="Quiz verwijderen">${icon('trash')}</button></div>
+          </div>
+          <div class="quiz-thumbs">${thumbs}${extra}</div>
+          <div class="quiz-actions">
+            <button class="primary" type="button" data-start-quiz="${quiz.id}">${icon('play')}Start</button>
+            <button type="button" data-edit-quiz="${quiz.id}">${icon('list')}Bewerken</button>
+          </div>
+        </article>`;
+      }).join('')
+    : `<div class="empty-state"><span class="icon-tile">${icon('list')}</span><strong>Nog geen quizzen</strong><small>Bouw je eerste quiz met vragen, afbeeldingen en punten per vraag.</small><button class="primary" type="button" data-new-quiz>${icon('plus')}Nieuwe quiz</button></div>`;
+}
+
+function blankQuizQuestion(points = 50) {
+  return { prompt: '', points, imageId: null, imageUrl: null };
+}
+
+function newQuizEditor() {
+  draftQuiz = { id: null, title: '', questions: [blankQuizQuestion()] };
+  showQuizEditor();
+}
+
+function openQuizEditor(id) {
+  const quiz = (state?.quizzes || []).find(entry => entry.id === id);
+  if (!quiz) {
+    toast('Deze quiz is niet meer beschikbaar.');
+    return;
+  }
+  draftQuiz = {
+    id: quiz.id,
+    title: quiz.title,
+    questions: quiz.questions.map(question => ({
+      prompt: question.prompt,
+      points: question.points,
+      imageId: question.imageId,
+      imageUrl: question.imageUrl || (question.imageId ? `/api/images/${question.imageId}` : null),
+      thumbUrl: question.thumbUrl || null
+    }))
+  };
+  showQuizEditor();
+}
+
+function showQuizEditor() {
+  if (!draftQuiz) return;
+  $('#quizTitleInput').value = draftQuiz.title;
+  $('#quizEditorTitle').textContent = draftQuiz.id ? 'Quiz bewerken' : 'Nieuwe quiz';
+  $('#quizStatus').textContent = 'Elke vraag heeft een tekst, afbeelding en puntenwaarde nodig.';
+  $('#quizEditor').classList.remove('hidden');
+  $('#quizList').classList.add('hidden');
+  $('#newQuiz').classList.add('hidden');
+  renderQuizEditor();
+  $('#quizTitleInput').focus();
+}
+
+function closeQuizEditor() {
+  draftQuiz = null;
+  $('#quizEditor').classList.add('hidden');
+  $('#quizList').classList.remove('hidden');
+  $('#newQuiz').classList.remove('hidden');
+  $('#quizStatus').textContent = '';
+  renderQuizList();
+}
+
+function renderQuizEditor() {
+  if (!draftQuiz) return;
+  $('#quizQuestions').innerHTML = draftQuiz.questions.map((question, index) => {
+    const imageUrl = question.thumbUrl || question.imageUrl || (question.imageId ? `/api/images/${question.imageId}?thumb=1` : null);
+    return `<article class="editor-question" data-question-row="${index}">
+      <span class="editor-number">Vraag ${index + 1}</span>
+      <label class="image-drop ${imageUrl ? 'has-image' : ''}" data-image-drop="${index}">
+        ${imageUrl ? `<img src="${esc(imageUrl)}" alt="Afbeelding voor vraag ${index + 1}" loading="lazy" decoding="async">` : `${icon('image')}<strong>Afbeelding</strong><small>JPG, PNG of WebP<br>max. 5 MB</small>`}
+        <span class="drop-overlay">${imageUrl ? 'Afbeelding vervangen' : 'Afbeelding kiezen'}</span>
+        <input type="file" accept="image/jpeg,image/png,image/webp" data-image-input="${index}" aria-label="Afbeelding voor vraag ${index + 1} kiezen">
+      </label>
+      <div class="editor-fields">
+        <label class="field"><span>Vraag</span><textarea data-prompt="${index}" maxlength="500" placeholder="Bijv. Welke film won de Oscar voor beste film in 2024?">${esc(question.prompt)}</textarea></label>
+      </div>
+      <div class="editor-side">
+        <label class="field"><span>Punten</span><input data-points="${index}" type="number" min="1" max="1000000" step="1" value="${question.points}"></label>
+        <div class="editor-question-actions">
+          <button type="button" data-move-up="${index}" aria-label="Vraag ${index + 1} omhoog verplaatsen"${index === 0 ? ' disabled' : ''}>↑</button>
+          <button type="button" data-move-down="${index}" aria-label="Vraag ${index + 1} omlaag verplaatsen"${index === draftQuiz.questions.length - 1 ? ' disabled' : ''}>↓</button>
+          <button class="danger" type="button" data-remove-question="${index}" aria-label="Vraag ${index + 1} verwijderen">${icon('trash')}</button>
+        </div>
+      </div>
+    </article>`;
+  }).join('');
+}
+
+function readQuizInputs() {
+  if (!draftQuiz) return;
+  draftQuiz.title = $('#quizTitleInput').value.trim();
+  for (const row of document.querySelectorAll('[data-question-row]')) {
+    const index = Number(row.dataset.questionRow);
+    const question = draftQuiz.questions[index];
+    if (!question) continue;
+    question.prompt = row.querySelector('[data-prompt]').value;
+    question.points = Number(row.querySelector('[data-points]').value);
+  }
+}
+
+async function saveQuiz() {
+  if (!draftQuiz || quizSaving) return;
+  readQuizInputs();
+  if (!draftQuiz.title) {
+    $('#quizStatus').textContent = 'Geef de quiz eerst een titel.';
+    $('#quizTitleInput').focus();
+    return;
+  }
+  if (!draftQuiz.questions.length) {
+    $('#quizStatus').textContent = 'Voeg minstens één vraag toe.';
+    return;
+  }
+  for (let i = 0; i < draftQuiz.questions.length; i++) {
+    const question = draftQuiz.questions[i];
+    if (!question.prompt.trim()) {
+      $('#quizStatus').textContent = `Vul de tekst van vraag ${i + 1} in.`;
+      return;
+    }
+    if (!Number.isInteger(question.points) || question.points < 1 || question.points > 1000000) {
+      $('#quizStatus').textContent = `Geef vraag ${i + 1} een geldig puntenaantal.`;
+      return;
+    }
+    if (!question.imageId) {
+      $('#quizStatus').textContent = `Kies een afbeelding voor vraag ${i + 1}.`;
+      return;
+    }
+  }
+  if ($('[data-image-drop].uploading')) {
+    $('#quizStatus').textContent = 'Wacht tot de afbeeldingen klaar zijn met uploaden.';
+    return;
+  }
+  quizSaving = true;
+  $('#saveQuiz').disabled = true;
+  $('#quizStatus').textContent = 'Quiz opslaan…';
+  try {
+    const body = {
+      title: draftQuiz.title,
+      questions: draftQuiz.questions.map(question => ({
+        prompt: question.prompt.trim(),
+        points: question.points,
+        imageId: question.imageId
+      }))
+    };
+    if (draftQuiz.id) body.quizId = draftQuiz.id;
+    const response = await fetch('/api/quizzes', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const message = response.status === 409
+        ? 'Er bestaat al een quiz met deze titel.'
+        : data.error === 'invalid_image'
+          ? 'Een afbeelding is niet meer beschikbaar. Upload ze opnieuw.'
+          : response.status === 401
+            ? 'Je sessie is verlopen. Meld je opnieuw aan.'
+            : 'De quiz kon niet worden opgeslagen. Controleer de velden.';
+      throw Error(message);
+    }
+    toast(draftQuiz.id ? 'Quiz bijgewerkt.' : 'Quiz aangemaakt.');
+    closeQuizEditor();
+  } catch (error) {
+    $('#quizStatus').textContent = error.message;
+    toast(error.message);
+  } finally {
+    quizSaving = false;
+    $('#saveQuiz').disabled = false;
+  }
+}
+
+async function deleteQuiz(id) {
+  const quiz = (state?.quizzes || []).find(entry => entry.id === id);
+  if (!quiz) return;
+  if (!(await ask('Quiz verwijderen?', `“${quiz.title}” verdwijnt uit de lijst. Lopende en eerdere sessies blijven werken.`, 'Verwijderen'))) return;
+  try {
+    const response = await fetch(`/api/quizzes/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    if (!response.ok) throw Error('De quiz kon niet worden verwijderd.');
+    toast('Quiz verwijderd.');
+  } catch (error) {
+    toast(error.message);
+  }
+}
+
+function startQuizSession(id) {
+  if (!(state?.quizzes || []).some(quiz => quiz.id === id)) {
+    toast('Deze quiz is niet meer beschikbaar.');
+    return;
+  }
+  if (state.activeGameId) {
+    toast('Rond eerst het actieve spel af.');
+    page('play');
+    return;
+  }
+  if (send({ type: 'game.start', quizId: id })) {
+    toast('Quiz gestart.');
+    page('play');
+  }
+}
+
+function makeQuizThumbnail(file) {
+  return new Promise(resolve => {
+    const url = URL.createObjectURL(file);
+    const image = new Image();
+    image.onload = () => {
+      try {
+        const scale = Math.min(1, 480 / Math.max(image.naturalWidth, image.naturalHeight));
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+        canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+        canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height);
+        canvas.toBlob(blob => {
+          URL.revokeObjectURL(url);
+          resolve(blob);
+        }, 'image/jpeg', .82);
+      } catch {
+        URL.revokeObjectURL(url);
+        resolve(null);
+      }
+    };
+    image.onerror = () => {
+      URL.revokeObjectURL(url);
+      resolve(null);
+    };
+    image.src = url;
+  });
+}
+
+async function uploadQuizImage(index, file) {
+  if (!draftQuiz) return;
+  const question = draftQuiz.questions[index];
+  if (!question) return;
+  if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+    toast('Gebruik een JPG-, PNG- of WebP-afbeelding.');
+    return;
+  }
+  if (file.size > 5 * 1024 * 1024) {
+    toast('De afbeelding is groter dan 5 MB.');
+    return;
+  }
+  const row = document.querySelector(`[data-question-row="${index}"]`);
+  row?.classList.add('uploading');
+  const drop = row?.querySelector('.image-drop');
+  drop?.classList.add('uploading');
+  const overlay = drop?.querySelector('.drop-overlay');
+  if (overlay) overlay.textContent = 'Uploaden…';
+  try {
+    const response = await fetch('/api/images', {
+      method: 'POST',
+      headers: { 'content-type': file.type },
+      body: file
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw Error(response.status === 401 ? 'Je sessie is verlopen. Meld je opnieuw aan.' : 'De afbeelding kon niet worden geüpload.');
+    }
+    question.imageId = data.id;
+    question.imageUrl = `/api/images/${data.id}`;
+    question.thumbUrl = null;
+    const thumbnail = await makeQuizThumbnail(file);
+    if (thumbnail) {
+      const thumbResponse = await fetch(`/api/images/${data.id}/thumbnail`, {
+        method: 'POST',
+        headers: { 'content-type': thumbnail.type || 'image/jpeg' },
+        body: thumbnail
+      });
+      if (thumbResponse.ok) question.thumbUrl = `/api/images/${data.id}?thumb=1`;
+    }
+    renderQuizEditor();
+    $('#quizStatus').textContent = 'Afbeelding klaar.';
+  } catch (error) {
+    row?.classList.remove('uploading');
+    drop?.classList.remove('uploading');
+    if (overlay) overlay.textContent = 'Afbeelding kiezen';
+    $('#quizStatus').textContent = error.message;
+    toast(error.message);
+  }
+}
+
+$('#newQuiz').onclick = newQuizEditor;
+$('#closeQuizEditor').onclick = closeQuizEditor;
+$('#saveQuiz').onclick = saveQuiz;
+$('#addQuestion').onclick = () => {
+  if (!draftQuiz) return;
+  if (draftQuiz.questions.length >= 100) {
+    toast('Een quiz kan maximaal 100 vragen bevatten.');
+    return;
+  }
+  const last = draftQuiz.questions[draftQuiz.questions.length - 1];
+  draftQuiz.questions.push(blankQuizQuestion(last?.points || 50));
+  renderQuizEditor();
+};
+$('#quizList').onclick = event => {
+  const start = event.target.closest('[data-start-quiz]');
+  if (start) return startQuizSession(start.dataset.startQuiz);
+  const edit = event.target.closest('[data-edit-quiz]');
+  if (edit) return openQuizEditor(edit.dataset.editQuiz);
+  const remove = event.target.closest('[data-delete-quiz]');
+  if (remove) return deleteQuiz(remove.dataset.deleteQuiz);
+  if (event.target.closest('[data-new-quiz]')) return newQuizEditor();
+};
+$('#quizQuestions').oninput = event => {
+  const row = event.target.closest('[data-question-row]');
+  if (!row || !draftQuiz) return;
+  const question = draftQuiz.questions[Number(row.dataset.questionRow)];
+  if (!question) return;
+  if (event.target.matches('[data-prompt]')) question.prompt = event.target.value;
+  if (event.target.matches('[data-points]')) question.points = Number(event.target.value);
+};
+$('#quizQuestions').onchange = event => {
+  const input = event.target.closest('[data-image-input]');
+  if (input && input.files?.[0]) uploadQuizImage(Number(input.dataset.imageInput), input.files[0]);
+};
+$('#quizQuestions').onclick = event => {
+  if (!draftQuiz) return;
+  const row = event.target.closest('[data-question-row]');
+  if (!row) return;
+  const index = Number(row.dataset.questionRow);
+  const up = event.target.closest('[data-move-up]');
+  const down = event.target.closest('[data-move-down]');
+  const remove = event.target.closest('[data-remove-question]');
+  if (up && index > 0) {
+    const [question] = draftQuiz.questions.splice(index, 1);
+    draftQuiz.questions.splice(index - 1, 0, question);
+    renderQuizEditor();
+  } else if (down && index < draftQuiz.questions.length - 1) {
+    const [question] = draftQuiz.questions.splice(index, 1);
+    draftQuiz.questions.splice(index + 1, 0, question);
+    renderQuizEditor();
+  } else if (remove) {
+    if (draftQuiz.questions.length === 1) draftQuiz.questions[0] = blankQuizQuestion();
+    else draftQuiz.questions.splice(index, 1);
+    renderQuizEditor();
+  }
+};
 
 function renderScoreViews() {
   if (!state) return;
@@ -304,6 +728,11 @@ async function connect(name = $('#roomName').value.trim(), password = $('#secret
           question_limit: 'Het maximum van 10.000 vragen is bereikt.',
           duplicate_request: 'Deze scan is al verwerkt.',
           question: 'Die vraag hoort niet bij dit spel.',
+          quiz: 'Deze quiz bestaat niet meer.',
+          quiz_empty: 'Deze quiz heeft nog geen vragen.',
+          quiz_finished: 'Dit was de laatste vraag. Rond de quiz af.',
+          duplicate_quiz: 'Er bestaat al een quiz met deze titel.',
+          invalid_image: 'De afbeelding kon niet worden gebruikt. Upload ze opnieuw.',
           request_failed: 'De actie kon niet worden verwerkt. Probeer opnieuw.',
           nothing: 'Er is geen scan om ongedaan te maken.'
         }[message.reason] || 'Actie geweigerd. Vernieuw de pagina en probeer opnieuw.';
@@ -395,8 +824,15 @@ $('#create').onclick = async () => {
 $('#gameForm').onsubmit = event => {
   event.preventDefault();
   if (!$('#gameForm').reportValidity()) return;
+  const quizId = $('#quizSelect').value;
+  if (quizId) {
+    if (send({ type: 'game.start', quizId })) toast('Quiz gestart.');
+    return;
+  }
   if (send({ type: 'game.start', pointsPerQuestion: Number($('#pointsPerQuestion').value) })) $('#pointsPerQuestion').value = '';
 };
+
+$('#quizSelect').onchange = updateGameFormMode;
 
 $$('[data-points]').forEach(button => {
   button.onclick = () => {
@@ -409,7 +845,13 @@ $('#stopGame').onclick = async () => {
   if (await ask('Spel stoppen?', 'De scores blijven bewaard, maar daarna zijn geen correcties meer mogelijk.', 'Spel stoppen')) gameAction('game.stop');
 };
 
-$('#next').onclick = () => gameAction('question.next');
+$('#next').onclick = async () => {
+  if (state?.game?.questionCount && state.game.question >= state.game.questionCount) {
+    if (await ask('Quiz afronden?', 'Alle vragen zijn gespeeld. De scores blijven bewaard in de spelhistoriek.', 'Quiz afronden')) gameAction('game.stop');
+    return;
+  }
+  gameAction('question.next');
+};
 
 $('#previous').onclick = () => {
   const previous = state.game.questions.find(question => question.ordinal === state.game.question - 1);

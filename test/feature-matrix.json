@@ -6,5 +6,6 @@
   "display": ["display login", "live score state", "total or per-question view", "game history selection", "display cannot mutate", "podium for top three", "current question highlight"],
   "security": ["origin allowlist", "authentication timeout", "message size limit", "rate-limit hooks", "security headers", "parameterized SQL", "runtime database least privilege"],
   "operations": ["health endpoint", "readiness endpoint", "migration tracking", "secret-file loading", "backup script", "compose secret separation"],
-  "ui": ["login form", "play navigation", "participant registration", "scoreboard navigation", "settings navigation", "scanner feedback", "responsive navigation", "public scoreboard", "score podium", "confirmation dialog", "score meters", "public fullscreen control"]
+  "ui": ["login form", "play navigation", "participant registration", "scoreboard navigation", "settings navigation", "scanner feedback", "responsive navigation", "public scoreboard", "score podium", "confirmation dialog", "score meters", "public fullscreen control"],
+  "quizzes": ["create quiz", "edit quiz", "delete quiz", "upload jpg/png/webp image", "reject oversized image", "reject unsupported image", "prompt and image required", "points per question", "reusable quiz", "immutable session snapshot"]
 }

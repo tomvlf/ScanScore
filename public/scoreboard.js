@@ -26,25 +26,32 @@ function render(next) {
   const view = $('#scoreView').value || 'total';
   if (view !== $('#scoreView').value) $('#scoreView').value = view;
 
-  const winners = game?.questions?.find(question => question.ordinal === game.question)?.winners?.length || 0;
+  const current = game?.questions?.find(question => question.ordinal === game.question);
+  const winners = current?.winners?.length || 0;
+  const quizLabel = game?.quizTitle ? `${game.quizTitle} · ` : '';
+  const ofTotal = game?.questionCount ? ` van ${game.questionCount}` : '';
   $('#gameInfo').textContent = game
-    ? `${game.endedAt ? 'Gestopt spel' : 'Actief spel'} · Vraag ${game.question}${winners ? ` · ${winners} ${winners === 1 ? 'winnaar' : 'winnaars'}` : ''}`
+    ? `${quizLabel}${game.endedAt ? 'Gestopt spel' : 'Actief spel'} · Vraag ${game.question}${ofTotal}${winners ? ` · ${winners} ${winners === 1 ? 'winnaar' : 'winnaars'}` : ''}`
     : 'Nog geen spel gestart';
 
   const players = next.players || [];
+  const questionView = view === 'question';
   renderPodium(next, $('#podium'));
-  $('#podium').classList.toggle('hidden', view !== 'total' || !players.length);
+  $('#podium').classList.toggle('hidden', questionView || view !== 'total' || !players.length);
 
   renderScores(next, view, $('#scoreList'), $('#scoreTable'), 3);
   const showList = view === 'total' && players.length > 3;
-  $('#scoreList').classList.toggle('hidden', !showList);
-  $('#boardEmpty').classList.toggle('hidden', players.length > 0);
+  $('#scoreList').classList.toggle('hidden', questionView || !showList);
+  $('#boardEmpty').classList.toggle('hidden', questionView || players.length > 0);
+  $('#questionStage').classList.toggle('hidden', !questionView);
+  if (questionView) renderQuestionStage(next, game, current);
   if (!players.length) $('#podium').classList.add('hidden');
 
   const selected = $('#gameHistory').value;
   $('#gameHistory').innerHTML = '<option value="">Actief / meest recente spel volgen</option>' + next.games.map((entry, index) => {
     const number = next.games.length - index;
-    return `<option value="${entry.id}">${entry.legacy ? 'Oude scores' : `Spel ${number}`}${entry.endedAt ? ' (gestopt)' : ' (actief)'}</option>`;
+    const name = entry.legacy ? 'Oude scores' : entry.quizTitle ? entry.quizTitle : `Spel ${number}`;
+    return `<option value="${entry.id}">${scoreEscape(name)}${entry.endedAt ? ' (gestopt)' : ' (actief)'}</option>`;
   }).join('');
   $('#gameHistory').value = next.games.some(entry => entry.id === selected) ? selected : '';
 
@@ -54,6 +61,33 @@ function render(next) {
     : 'Breukdelen worden pas voor weergave afgerond op twee decimalen.';
   setStatus('Live', true);
 }
+
+function renderQuestionStage(next, game, question) {
+  const stage = $('#questionStage');
+  const hasQuestion = !!(game && question && (question.prompt || question.imageId));
+  const hasImage = !!(question && question.imageId);
+  stage.classList.toggle('empty', !hasQuestion);
+  $('#stageEyebrow').textContent = game?.quizTitle ? `${game.quizTitle} · Vraag ${question?.ordinal || game.question}` : 'Huidige vraag';
+  $('#stageMedia').classList.toggle('hidden', !hasImage);
+  if (hasImage) {
+    $('#stageMedia').classList.remove('hidden');
+    const image = $('#stageImage');
+    const src = question.imageUrl || `/api/images/${question.imageId}`;
+    if (!image.getAttribute || image.getAttribute('src') !== src) {
+      image.src = src;
+      image.alt = question.prompt || 'Vraagafbeelding';
+    }
+  }
+  if (hasQuestion) {
+    $('#stagePrompt').textContent = question.prompt || '';
+    $('#stageMeta').textContent = `Vraag ${question.ordinal}${game.questionCount ? ` van ${game.questionCount}` : ''} · ${formatPoints(question.points)} punten`;
+  } else {
+    $('#stagePrompt').textContent = game ? 'Deze sessie heeft nog geen vraag om te tonen.' : 'Er is nog geen spel gestart.';
+    $('#stageMeta').textContent = game ? 'Start een quiz met vragen om ze hier groot te tonen.' : 'Zodra de quizmaster start, verschijnt de vraag hier.';
+  }
+}
+
+$('#stageImage').onerror = () => $('#stageMedia').classList.add('hidden');
 
 $('#scoreView').onchange = () => {
   if (state) render(state);

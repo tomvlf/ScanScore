@@ -15,6 +15,9 @@ Geen eindige testsuite kan letterlijk iedere mogelijke invoer, browser, netwerks
 - minimale runtimeprivileges;
 - WebSocket- en browsersecurity-instellingen;
 - Docker-secretkoppelingen;
+- quizopslag, vraagkoppelingen en sessie-snapshots;
+- quiz-API voor opslaan en starten met gesimuleerde database;
+- afbeeldingsformaten, uploadroute en quiz-API;
 - health- en readinessroutes;
 - responsive en toegankelijke UI-elementen;
 - parametrisatie van SQL;
@@ -45,7 +48,11 @@ Voer deze extra integratietest lokaal uit met Docker/PostgreSQL:
 - spel stoppen en nieuw spel met nulscores starten;
 - historie en scores van verwijderde spelers behouden;
 - totalen of punten per vraag tonen;
-- display aanmelden en actuele staat ontvangen;
+- quiz aanmaken, bewerken en verwijderen;
+- quizafbeelding uploaden, valideren, verkleinen en serveren;
+- quizsessie starten met eigen punten per vraag;
+- laatste vraag afronden en `quiz_finished` weigeren;
+- display aanmelden, de actieve vraag ontvangen en geen quizlijst ontvangen;
 - displaymutatie weigeren.
 
 ### Databaseprivilegetest
@@ -73,4 +80,4 @@ npm run test:all
 
 ## Grenzen van automatisering
 
-De suite automatiseert alle huidige serveracties en primaire productflows. Hardware- en infrastructuurgedrag zoals echte cameratoestemming, verschillende mobiele browsers, TLS-certificaatvernieuwing, reverse-proxyfouten, off-host back-upherstel en onafhankelijke penetratietests blijven aparte acceptatiecontroles.
+De suite automatiseert alle huidige serveracties en primaire productflows, inclusief quizaanmaak, afbeeldingsupload en een volledige quizsessie. Hardware- en infrastructuurgedrag zoals echte cameratoestemming, verschillende mobiele browsers, TLS-certificaatvernieuwing, reverse-proxyfouten, off-host back-upherstel en onafhankelijke penetratietests blijven aparte acceptatiecontroles.

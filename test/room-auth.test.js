@@ -105,6 +105,9 @@ test('display signs in with room name/password but cannot mutate room data',asyn
  const display=await app.authenticate({role:'display',roomName:' FAMILY QUIZ ',secret:hostSecret});
  assert.equal(display.socket.role,'display');
  assert.equal(display.message.state.title,'Family Quiz');
+ assert.ok(!('quizzes' in display.message.state));
+ const host=await app.authenticate({role:'host',roomName:'FAMILY QUIZ',secret:hostSecret});
+ assert.deepEqual(host.message.state.quizzes,[]);
  await assert.rejects(app.act(display.socket,{type:'player.add',name:'Intruder'}),/forbidden/);
 });
 

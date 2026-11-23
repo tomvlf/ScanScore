@@ -6,11 +6,14 @@ ScoreScan is een selfhosted webapp voor quizzen, spellen en activiteiten waarbij
 
 ## Wat kun je ermee?
 
+- quizzen maken met eigen vragen, afbeeldingen en punten per vraag;
+- dezelfde quiz hergebruiken voor meerdere spelsessies;
 - deelnemers of ploegen aan een fysieke QR-kaart koppelen;
 - winnaars scannen met de camera van een smartphone;
-- één spel tegelijk in een ruimte spelen;
+- één sessie tegelijk in een ruimte spelen;
 - deelnemers en hun QR-koppelingen tussen spellen behouden;
 - de puntenpot per vraag gelijk verdelen over alle gescande winnaars;
+- de vraag met afbeelding tonen op het bedieningsscherm en het publieke scherm;
 - eerdere vragen tijdens het spel corrigeren;
 - totalen of punten per vraag bekijken;
 - gestopte spellen als historiek bewaren;
@@ -19,12 +22,12 @@ ScoreScan is een selfhosted webapp voor quizzen, spellen en activiteiten waarbij
 
 ## Hoe werkt een spel?
 
-1. De spelmeester maakt een beveiligde ruimte en is meteen aangemeld.
-2. Deelnemers worden met hun naam en persoonlijke QR-code aan de ruimte gekoppeld.
-3. Voor het spel wordt de puntenpot per vraag ingesteld.
-4. Iedere winnaar wordt gescand; de pot wordt live gelijk onder de winnaars verdeeld.
-5. De spelmeester kiest **Volgende vraag** zodra alle winnaars van die vraag gescand zijn.
-6. Eerdere vragen zijn tijdens het spel opnieuw te openen om winnaars te corrigeren.
+1. De spelmeester maakt een beveiligde ruimte, een quiz met vragen en afbeeldingen, en koppelt de deelnemers aan hun QR-kaarten.
+2. Bij de start kiest de spelmeester de quiz. De punten per vraag komen uit de quiz; bij een snel spel zonder quiz stelt hij één puntenpot in.
+3. Iedere vraag toont de tekst en afbeelding op het bedieningsscherm. De winnaars worden gescand en de pot wordt live gelijk onder hen verdeeld.
+4. De spelmeester kiest **Volgende vraag** zodra alle winnaars van die vraag gescand zijn. Na de laatste vraag rondt hij de quiz af.
+5. Eerdere vragen zijn tijdens het spel opnieuw te openen om winnaars te corrigeren.
+6. Het publieke scherm toont het klassement, of met de weergave **Vraag tonen** de actieve vraag groot in beeld.
 
 ## Opbouw
 
@@ -182,6 +185,10 @@ Laat je reverse proxy HTTPS en WebSocketverbindingen doorsturen naar:
 http://127.0.0.1:8088
 ```
 
+Sta voor quizafbeeldingen een request body van minstens 6 MB toe
+(bijvoorbeeld `client_max_body_size 6m` in nginx). De applicatie weigert
+afbeeldingen groter dan 5 MB en accepteert alleen JPG, PNG en WebP.
+
 Gebruik precies zoveel `TRUST_PROXY_HOPS` als er vertrouwde proxy's tussen de
 publieke client en de app staan (standaard `1`). De proxy moet de ontvangen
 `X-Forwarded-For`-keten bijwerken met het echte clientadres en dat adres niet in
@@ -207,6 +214,16 @@ Open je publieke ScoreScan-adres en doorloop deze controle:
 ---
 
 # ScoreScan gebruiken
+
+## Een quiz maken
+
+1. Open **Quizzen** en kies **Nieuwe quiz**.
+2. Vul een quiztitel in en voeg per vraag een tekst, een afbeelding en een puntenwaarde toe.
+3. Afbeeldingen mogen JPG, PNG of WebP zijn en maximaal 5 MB groot. De afbeelding wordt in de database bewaard en meegestuurd in back-ups.
+4. Voeg vragen toe, verplaats ze met de pijlen of verwijder ze. Kies **Quiz opslaan**.
+5. Een quiz blijft bewerkbaar en is opnieuw te spelen. Een gestarte sessie houdt een snapshot van de vraagtekst, afbeelding en punten, zodat spelhistoriek nooit verandert.
+
+Start een sessie met **Start** op de quizkaart, of kies de quiz op **Spelen**. De spelers, QR-kaarten en het scoreverloop werken zoals bij een snel spel.
 
 ## Installeren als Android-app
 
@@ -270,17 +287,19 @@ Op een gsm staat de scanner direct onder een compacte vraag- en puntenbalk.
 De camera blijft aan bij de volgende vraag. Open **Vraag corrigeren of spel
 stoppen** onder de winnaarslijst voor eerdere vragen en het beëindigen van het spel.
 
-1. Open **Spelen** en start een spel met het aantal punten per vraag.
-2. Scan iedere winnaar van de huidige vraag. Iedere geldige scan krijgt
-   aanvankelijk de volledige pot; de app herberekent de gelijke aandelen
-   onmiddellijk zodra er meer winnaars bijkomen.
+1. Open **Spelen** en kies een quiz, of laat de quiz leeg voor een snel spel met één puntenpot.
+2. De actieve vraag met afbeelding en tekst staat boven de scanner. Scan iedere
+   winnaar van de huidige vraag. Iedere geldige scan krijgt aanvankelijk de
+   volledige pot; de app herberekent de gelijke aandelen onmiddellijk zodra er
+   meer winnaars bijkomen.
 3. Voorbeeld: bij 50 punten krijgen twee winnaars 25 punten elk. Bij drie
    winnaars is dat 16,67 per winnaar. Breukdelen blijven intern behouden; de
    weergave rondt af op twee decimalen.
-4. Kies **Volgende vraag** wanneer alle winnaars gescand zijn.
+4. Kies **Volgende vraag** wanneer alle winnaars gescand zijn. Bij de laatste
+   vraag wordt de knop **Quiz afronden**.
 5. Kies een eerdere vraag in de vraagkiezer om een winnaar te verwijderen of
    opnieuw te scannen. De verdeling en totaalscores worden direct bijgewerkt.
-6. Stop het spel wanneer het afgelopen is. Een nieuw spel begint met nul
+6. Rond de quiz af wanneer het afgelopen is. Een nieuwe sessie begint met nul
    punten; spelers, QR-koppelingen en eerdere spelresultaten blijven bewaard.
 
 ## Publiek scorebord openen
@@ -294,8 +313,9 @@ https://quiz.jouwdomein.be/scoreboard.html
 Vul dezelfde ruimtenaam en hetzelfde wachtwoord in als op het bedieningsscherm.
 Op hetzelfde apparaat wordt je bestaande aanmelding automatisch hergebruikt.
 Ook dit scherm blijft na vernieuwen of heropenen aangemeld. Het scorebord kan
-geen deelnemers of scores wijzigen. Kies **Totaalpunten** of **Punten per vraag**
-en selecteer desgewenst een eerder spel.
+geen deelnemers of scores wijzigen. Kies **Totaalpunten**, **Punten per vraag** of **Vraag tonen** en selecteer
+desgewenst een eerder spel. **Vraag tonen** zet de actieve vraag met afbeelding
+groot in beeld, ideaal tijdens het antwoorden.
 
 Het gedeelde wachtwoord geeft ook toegang tot de spelbediening: deel het alleen
 met vertrouwde personen. De oude displaytoken-aanmelding blijft voor bestaande
@@ -346,6 +366,7 @@ docker compose ps
 ```
 
 Het script maakt een PostgreSQL-dump en een SHA-256-controlebestand in `backups/`.
+Quizafbeeldingen zitten in de database en worden dus mee in de dump bewaard.
 
 Voor productiegebruik:
 
@@ -443,8 +464,8 @@ npm run repo:check
 Belangrijke mappen:
 
 ```text
-public/          browserinterface
-migrations/      PostgreSQL-schemawijzigingen
+public/          browserinterface en quizbouwer
+migrations/      PostgreSQL-schemawijzigingen (inclusief quizafbeeldingen)
 postgres-init/   eenmalige veilige database-initialisatie
 scripts/         installatie-, test- en beheerhulpmiddelen
 test/            statische en integratietests

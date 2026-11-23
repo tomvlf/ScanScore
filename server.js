@@ -4,7 +4,7 @@ function secret(fileEnv,valueEnv){const file=process.env[fileEnv];if(file)return
 const DATABASE_URL=secret('DATABASE_URL_FILE','DATABASE_URL'),PEPPER=secret('SECRET_PEPPER_FILE','SECRET_PEPPER'),QR_SECRET=secret('QR_ENCRYPTION_KEY_FILE','QR_ENCRYPTION_KEY');
 const PORT=+(process.env.PORT||8080),PUBLIC=path.join(__dirname,'public'),ORIGINS=(process.env.ALLOWED_ORIGINS||'http://localhost:8080').split(',').map(s=>s.trim()).filter(Boolean),QR_KEY=Buffer.from(QR_SECRET||'','base64'),TRUST_PROXY_HOPS=proxyHops();if(!DATABASE_URL||!PEPPER||QR_KEY.length!==32)throw new Error('Database URL, secret pepper and 32-byte QR encryption key are required');
 const db=new Pool({connectionString:DATABASE_URL,max:+process.env.DB_POOL_MAX||10,idleTimeoutMillis:30000,connectionTimeoutMillis:5000,ssl:process.env.DB_SSL==='1'?{rejectUnauthorized:true,ca:process.env.DB_CA}:false,application_name:'scorescan-v1'});db.on('error',e=>log('critical','db_pool_error',{message:e.message}));
-const ipBuckets=new Map(),authBuckets=new Map(),connections=new Map(),roomBuckets=new Map(),hashQueue=[];let hashActive=false;
+const ipBuckets=new Map(),authBuckets=new Map(),connections=new Map(),roomBuckets=new Map(),imageBuckets=new Map(),quizBuckets=new Map(),hashQueue=[];let hashActive=false;
 const b64=n=>crypto.randomBytes(n).toString('base64url'),safeEq=(a,b)=>a.length===b.length&&crypto.timingSafeEqual(a,b);function hmac(x){return crypto.createHmac('sha256',PEPPER).update(x).digest()}
 function proxyHops(){const raw=process.env.TRUST_PROXY_HOPS??(process.env.TRUST_PROXY==='1'?'1':'0'),value=Number(raw);return Number.isInteger(value)&&value>=0&&value<=8?value:0}
 function drainHashes(){
@@ -17,17 +17,145 @@ async function passOk(secret,hash){try{const[,salt,expected]=hash.split('$');ret
 function encQr(s){const iv=crypto.randomBytes(12),c=crypto.createCipheriv('aes-256-gcm',QR_KEY,iv),ct=Buffer.concat([c.update(s,'utf8'),c.final()]);return Buffer.concat([iv,c.getAuthTag(),ct])}function validId(x){return typeof x==='string'&&/^[a-z0-9][a-z0-9_-]{2,39}$/.test(x)}function txt(x,n=80){return typeof x==='string'&&x.trim().length&&x.trim().length<=n?x.trim():null}function integer(x,a,b){return Number.isSafeInteger(x)&&x>=a&&x<=b?x:null}
 function ip(req){const forwarded=String(req.headers['x-forwarded-for']||'').split(',').map(value=>value.trim()).filter(Boolean);return TRUST_PROXY_HOPS&&forwarded.length>=TRUST_PROXY_HOPS?forwarded[forwarded.length-TRUST_PROXY_HOPS]:(req.socket.remoteAddress||'unknown')}
 function limited(map,key,max,ms){const now=Date.now(),a=(map.get(key)||[]).filter(t=>now-t<ms);a.push(now);map.set(key,a);if(map.size>10000)for(const[name,times]of map)if(!times.some(t=>now-t<ms))map.delete(name);return a.length>max}function log(level,event,meta={}){process.stdout.write(JSON.stringify({ts:new Date().toISOString(),level,event,...meta})+'\n')}
-function sec(res,type='application/json; charset=utf-8'){for(const[k,v]of Object.entries({'Content-Type':type,'Content-Security-Policy':"default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self' wss:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'",'X-Frame-Options':'DENY','X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer','Permissions-Policy':'camera=(self), microphone=(), geolocation=(), payment=(), usb=()','Cross-Origin-Opener-Policy':'same-origin','Cross-Origin-Resource-Policy':'same-origin','Cache-Control':'no-store'}))res.setHeader(k,v);if(process.env.NODE_ENV==='production')res.setHeader('Strict-Transport-Security','max-age=63072000; includeSubDomains; preload')}
+function sec(res,type='application/json; charset=utf-8'){for(const[k,v]of Object.entries({'Content-Type':type,'Content-Security-Policy':"default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; connect-src 'self' wss:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'",'X-Frame-Options':'DENY','X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer','Permissions-Policy':'camera=(self), microphone=(), geolocation=(), payment=(), usb=()','Cross-Origin-Opener-Policy':'same-origin','Cross-Origin-Resource-Policy':'same-origin','Cache-Control':'no-store'}))res.setHeader(k,v);if(process.env.NODE_ENV==='production')res.setHeader('Strict-Transport-Security','max-age=63072000; includeSubDomains; preload')}
 function read(req,max=4096){return new Promise((ok,no)=>{let s='',n=0;req.on('data',c=>{n+=c.length;if(n>max){no(Error('large'));req.destroy()}else s+=c});req.on('end',()=>{try{ok(JSON.parse(s||'{}'))}catch{no(Error('json'))}});req.on('error',no)})}
+
+const IMAGE_TYPES=new Set(['image/jpeg','image/png','image/webp']),MAX_IMAGE_BYTES=5*1024*1024;
+function validUuid(x){return typeof x==='string'&&/^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(x)}
+function imageMime(data){if(!Buffer.isBuffer(data)||data.length<12)return null;if(data[0]===0xff&&data[1]===0xd8&&data[2]===0xff)return'image/jpeg';if(data.subarray(0,8).equals(Buffer.from('89504e470d0a1a0a','hex')))return'image/png';if(data.subarray(0,4).toString('latin1')==='RIFF'&&data.subarray(8,12).toString('latin1')==='WEBP')return'image/webp';return null}
+function readBuffer(req,max){return new Promise((ok,no)=>{const chunks=[];let n=0;req.on('data',c=>{n+=c.length;if(n>max){no(Error('large'));req.destroy()}else chunks.push(c)});req.on('end',()=>ok(Buffer.concat(chunks)));req.on('error',no)})}
+async function imageUpload(req,res,reqId){
+ sec(res);
+ if(!ORIGINS.includes(req.headers.origin)){res.writeHead(403);res.end('{"error":"origin_denied"}');return}
+ const type=String(req.headers['content-type']||'').split(';')[0].trim().toLowerCase();
+ if(!IMAGE_TYPES.has(type)){res.writeHead(415);res.end('{"error":"unsupported_image"}');return}
+ if(limited(imageBuckets,ip(req),30,15*60e3)){res.writeHead(429);res.end('{"error":"rate_limited"}');return}
+ const c=await db.connect();
+ try{
+  const room=await savedSession(c,req);
+  if(!room){res.writeHead(401);res.end('{"error":"session_expired"}');return}
+  const data=await readBuffer(req,MAX_IMAGE_BYTES);
+  if(!data.length||imageMime(data)!==type){res.writeHead(415);res.end('{"error":"unsupported_image"}');return}
+  const image=(await c.query('INSERT INTO quiz_images(room_id,mime,bytes,data) VALUES($1,$2,$3,$4) RETURNING id',[room.id,type,data.length,data])).rows[0];
+  await audit(c,room.id,room.session_id,'image_uploaded','ok',reqId,req,{imageId:image.id,bytes:data.length,mime:type});
+  res.writeHead(201);res.end(JSON.stringify({id:image.id,mime:type,bytes:data.length}));
+ }catch(e){
+  log('warning','image_rejected',{reason:e.code||e.message});
+  if(!res.headersSent)res.writeHead(e.message==='large'?413:400);
+  res.end('{"error":"image_upload_failed"}');
+ }finally{c.release()}
+}
+async function imageThumb(req,res,id,reqId){
+ sec(res);
+ if(!ORIGINS.includes(req.headers.origin)){res.writeHead(403);res.end('{"error":"origin_denied"}');return}
+ const type=String(req.headers['content-type']||'').split(';')[0].trim().toLowerCase();
+ if(!IMAGE_TYPES.has(type)){res.writeHead(415);res.end('{"error":"unsupported_image"}');return}
+ if(limited(imageBuckets,ip(req),60,15*60e3)){res.writeHead(429);res.end('{"error":"rate_limited"}');return}
+ const c=await db.connect();
+ try{
+  const room=await savedSession(c,req);
+  if(!room){res.writeHead(401);res.end('{"error":"session_expired"}');return}
+  const data=await readBuffer(req,512*1024);
+  if(!data.length||imageMime(data)!==type){res.writeHead(415);res.end('{"error":"unsupported_image"}');return}
+  if(!(await c.query('UPDATE quiz_images SET thumb_mime=$1,thumb_bytes=$2,thumb_data=$3 WHERE id=$4 AND room_id=$5 RETURNING id',[type,data.length,data,id,room.id])).rowCount){res.writeHead(404);res.end('{"error":"not_found"}');return}
+  await audit(c,room.id,room.session_id,'image_thumbnail','ok',reqId,req,{imageId:id,bytes:data.length});
+  res.writeHead(200);res.end('{"ok":true}');
+ }catch(e){log('warning','thumbnail_rejected',{reason:e.code||e.message});if(!res.headersSent)res.writeHead(e.message==='large'?413:400);res.end('{"error":"thumbnail_failed"}')}finally{c.release()}
+}
+async function imageGet(req,res){
+ sec(res);
+ const parsed=new URL(req.url,'http://x'),id=(/^\/api\/images\/([0-9a-f-]{36})$/.exec(parsed.pathname)||[])[1],thumb=parsed.searchParams.get('thumb')==='1';
+ if(!id){res.writeHead(404);res.end();return}
+ const c=await db.connect();
+ try{
+  const room=await savedSession(c,req);
+  if(!room){res.writeHead(401);res.end('{"error":"session_expired"}');return}
+  let image=thumb?(await c.query('SELECT thumb_mime AS mime,thumb_data AS data FROM quiz_images WHERE id=$1 AND room_id=$2 AND thumb_data IS NOT NULL',[id,room.id])).rows[0]:null;
+  if(!image)image=(await c.query('SELECT mime,data FROM quiz_images WHERE id=$1 AND room_id=$2',[id,room.id])).rows[0];
+  if(!image){res.writeHead(404);res.end();return}
+  res.setHeader('Content-Type',image.mime);res.setHeader('Content-Length',image.data.length);res.setHeader('Cache-Control','private, max-age=31536000, immutable');res.setHeader('Content-Disposition','inline');
+  res.writeHead(200);res.end(image.data);
+ }catch(e){log('warning','image_read_failed',{reason:e.code||e.message});if(!res.headersSent)res.writeHead(404);res.end()}finally{c.release()}
+}
+async function broadcastState(slug){
+ const c=await db.connect();
+ try{for(const x of wss.clients)if(x.authed&&x.roomSlug===slug&&x.readyState===1){try{x.send(JSON.stringify({type:'state',state:await state(c,slug,x.gameId,x.role==='host')}))}catch(error){log('warning','state_send_failed',{reason:error.message})}}}finally{c.release()}
+}
+async function quizSave(req,res,reqId){
+ sec(res);
+ if(!ORIGINS.includes(req.headers.origin)){res.writeHead(403);res.end('{"error":"origin_denied"}');return}
+ const c=await db.connect();let started=false;
+ try{
+  const room=await savedSession(c,req);
+  if(!room){res.writeHead(401);res.end('{"error":"session_expired"}');return}
+  if(limited(quizBuckets,ip(req),30,15*60e3)){res.writeHead(429);res.end('{"error":"rate_limited"}');return}
+  const body=await read(req,262144),title=txt(body.title,120),input=Array.isArray(body.questions)?body.questions:[];
+  if(!title||!input.length||input.length>100){res.writeHead(400);res.end('{"error":"invalid_input"}');return}
+  const questions=[];
+  for(const item of input){
+   const prompt=txt(item&&item.prompt,500),points=integer(item&&item.points,1,1000000),imageId=item&&validUuid(item.imageId)?item.imageId:null;
+   if(!prompt||points===null||!imageId){res.writeHead(400);res.end('{"error":"invalid_input"}');return}
+   questions.push({prompt,points,imageId});
+  }
+  const ids=[...new Set(questions.map(q=>q.imageId))];
+  const owned=(await c.query('SELECT id FROM quiz_images WHERE room_id=$1 AND id=ANY($2::uuid[])',[room.id,ids])).rows.map(row=>row.id);
+  if(owned.length!==ids.length){res.writeHead(400);res.end('{"error":"invalid_image"}');return}
+  const update=body.quizId!==undefined&&body.quizId!==null&&body.quizId!=='';
+  if(update&&!validUuid(body.quizId)){res.writeHead(400);res.end('{"error":"invalid_input"}');return}
+  await c.query('BEGIN');started=true;
+  let quizId;
+  if(update){
+   if(!(await c.query('UPDATE quizzes SET title=$1,updated_at=clock_timestamp() WHERE room_id=$2 AND id=$3 RETURNING id',[title,room.id,body.quizId])).rowCount)throw Error('quiz');
+   quizId=body.quizId;
+   await c.query('DELETE FROM quiz_questions WHERE quiz_id=$1',[quizId]);
+  }else{
+   quizId=(await c.query('INSERT INTO quizzes(room_id,title) VALUES($1,$2) RETURNING id',[room.id,title])).rows[0].id;
+  }
+  for(let i=0;i<questions.length;i++)await c.query('INSERT INTO quiz_questions(quiz_id,ordinal,prompt,points,image_id) VALUES($1,$2,$3,$4,$5)',[quizId,i+1,questions[i].prompt,questions[i].points,questions[i].imageId]);
+  await c.query('UPDATE rooms SET revision=revision+1,updated_at=now() WHERE id=$1',[room.id]);
+  await audit(c,room.id,room.session_id,update?'quiz_updated':'quiz_created','ok',reqId,req,{quizId,questions:questions.length});
+  await c.query('COMMIT');started=false;
+  broadcastState(room.slug).catch(error=>log('warning','state_broadcast_failed',{reason:error.message}));
+  res.writeHead(update?200:201);res.end(JSON.stringify({quizId}));
+ }catch(e){
+  if(started)await c.query('ROLLBACK').catch(()=>{});
+  log('warning','quiz_rejected',{reason:e.code||e.message});
+  if(!res.headersSent)res.writeHead(e.code==='23505'?409:e.message==='quiz'?404:400);
+  res.end(JSON.stringify({error:e.code==='23505'?'duplicate_quiz':e.message==='quiz'?'not_found':'quiz_save_failed'}));
+ }finally{c.release()}
+}
+async function quizDelete(req,res,reqId){
+ sec(res);
+ if(!ORIGINS.includes(req.headers.origin)){res.writeHead(403);res.end('{"error":"origin_denied"}');return}
+ const id=(/^\/api\/quizzes\/([0-9a-f-]{36})$/.exec(req.url)||[])[1];
+ if(!id){res.writeHead(404);res.end();return}
+ const c=await db.connect();let started=false;
+ try{
+  const room=await savedSession(c,req);
+  if(!room){res.writeHead(401);res.end('{"error":"session_expired"}');return}
+  await c.query('BEGIN');started=true;
+  if(!(await c.query('DELETE FROM quizzes WHERE room_id=$1 AND id=$2 RETURNING id',[room.id,id])).rowCount)throw Error('quiz');
+  await c.query('UPDATE rooms SET revision=revision+1,updated_at=now() WHERE id=$1',[room.id]);
+  await audit(c,room.id,room.session_id,'quiz_deleted','ok',reqId,req,{quizId:id});
+  await c.query('COMMIT');started=false;
+  broadcastState(room.slug).catch(error=>log('warning','state_broadcast_failed',{reason:error.message}));
+  res.writeHead(200);res.end('{"ok":true}');
+ }catch(e){
+  if(started)await c.query('ROLLBACK').catch(()=>{});
+  log('warning','quiz_delete_rejected',{reason:e.code||e.message});
+  if(!res.headersSent)res.writeHead(e.message==='quiz'?404:400);
+  res.end('{"error":"quiz_delete_failed"}');
+ }finally{c.release()}
+}
 async function audit(c,room,session,event,outcome,reqId,req,meta={}){await c.query('INSERT INTO audit_events(room_id,actor_session_id,severity,event_type,outcome,ip_hash,correlation_id,metadata) VALUES($1,$2,$3,$4,$5,$6,$7,$8)',[room,session,outcome==='ok'?'info':'warning',event,outcome,hmac(ip(req)),reqId,JSON.stringify(meta)])}
-async function state(c,slug,gameId){
+async function state(c,slug,gameId,includeQuizzes=false){
  await c.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
  try{
   const r=(await c.query('SELECT * FROM rooms WHERE slug=$1',[slug])).rows[0];
   if(!r){await c.query('COMMIT');return null}
-  const games=(await c.query('SELECT id,points_per_question,current_question,legacy,started_at,ended_at FROM games WHERE room_id=$1 ORDER BY started_at DESC,id',[r.id])).rows.map(g=>({id:g.id,pointsPerQuestion:g.points_per_question,question:g.current_question,legacy:g.legacy,startedAt:g.started_at,endedAt:g.ended_at}));
+  const games=(await c.query('SELECT id,points_per_question,current_question,legacy,started_at,ended_at,quiz_id,quiz_title,question_count FROM games WHERE room_id=$1 ORDER BY started_at DESC,id',[r.id])).rows.map(g=>({id:g.id,pointsPerQuestion:g.points_per_question,question:g.current_question,legacy:g.legacy,startedAt:g.started_at,endedAt:g.ended_at,quizId:g.quiz_id,quizTitle:g.quiz_title,questionCount:g.question_count}));
   const activeGame=games.find(g=>!g.endedAt),game=games.find(g=>g.id===gameId)||activeGame||games[0]||null;
-  const questions=game?(await c.query('SELECT id,ordinal,points,label FROM game_questions WHERE game_id=$1 ORDER BY ordinal',[game.id])).rows:[];
+  const questions=game?(await c.query('SELECT id,ordinal,points,label,prompt,image_id FROM game_questions WHERE game_id=$1 ORDER BY ordinal',[game.id])).rows:[];
   const awards=game?(await c.query(`SELECT w.question_id,w.player_id,
    COALESCE(w.legacy_points::numeric,q.points::numeric/count(*) OVER(PARTITION BY q.id)) points
    FROM question_winners w JOIN game_questions q ON q.id=w.question_id WHERE q.game_id=$1`,[game.id])).rows:[];
@@ -38,7 +166,14 @@ async function state(c,slug,gameId){
    const scores=Object.fromEntries(awards.filter(a=>a.player_id===p.id).map(a=>[a.question_id,Number(a.points)]));
    return {...p,scores,score:Object.values(scores).reduce((sum,points)=>sum+points,0)};
   });
-  const result={title:r.title,games,activeGameId:activeGame?.id||null,game:game?{...game,questions:questions.map(q=>({...q,winners:awards.filter(a=>a.question_id===q.id).map(a=>({playerId:a.player_id,points:Number(a.points)}))}))}:null,players,revision:Number(r.revision)};
+  let quizzes=[];
+  if(includeQuizzes){
+   const quizRows=(await c.query('SELECT id,title,updated_at FROM quizzes WHERE room_id=$1 ORDER BY updated_at DESC,id',[r.id])).rows;
+   const quizIds=quizRows.map(q=>q.id);
+   const quizQuestions=quizIds.length?(await c.query('SELECT quiz_id,id,ordinal,prompt,points,image_id FROM quiz_questions WHERE quiz_id=ANY($1::uuid[]) ORDER BY quiz_id,ordinal',[quizIds])).rows:[];
+   quizzes=quizRows.map(q=>({id:q.id,title:q.title,updatedAt:q.updated_at,questions:quizQuestions.filter(x=>x.quiz_id===q.id).map(x=>({id:x.id,ordinal:x.ordinal,prompt:x.prompt,points:x.points,imageId:x.image_id,imageUrl:x.image_id?'/api/images/'+x.image_id:null,thumbUrl:x.image_id?'/api/images/'+x.image_id+'?thumb=1':null}))}));
+  }
+  const result={title:r.title,games,activeGameId:activeGame?.id||null,game:game?{...game,questions:questions.map(q=>({...q,prompt:q.prompt,imageId:q.image_id,imageUrl:q.image_id?'/api/images/'+q.image_id:null,thumbUrl:q.image_id?'/api/images/'+q.image_id+'?thumb=1':null,winners:awards.filter(a=>a.question_id===q.id).map(a=>({playerId:a.player_id,points:Number(a.points)}))}))}:null,players,...(includeQuizzes?{quizzes}:{}),revision:Number(r.revision)};
   await c.query('COMMIT');return result;
  }catch(e){await c.query('ROLLBACK');throw e}
 }
@@ -87,7 +222,7 @@ async function sessionRequest(req,res){
   res.end(JSON.stringify({roomName:room.title}));
  }finally{c.release()}
 }
-const server=http.createServer(async(req,res)=>{const reqId=crypto.randomUUID();try{if(limited(ipBuckets,ip(req),120,60000)){sec(res);res.writeHead(429);return res.end('{"error":"rate_limited"}')}if(req.url==='/api/session')return await sessionRequest(req,res);if(req.method==='POST'&&req.url==='/api/rooms'){if(!ORIGINS.includes(req.headers.origin)){sec(res);res.writeHead(403);return res.end('{"error":"origin_denied"}')}const b=await read(req),title=txt(b.roomName),secret=b.hostSecret;if(!title||typeof secret!=='string'||!((/^\d{8,16}$/.test(secret))||(secret.length>=12&&secret.length<=128))){sec(res);res.writeHead(400);return res.end('{"error":"invalid_input"}')}const client=ip(req);if(limited(roomBuckets,client,5,15*60e3)||limited(roomBuckets,'global',30,15*60e3)){sec(res);res.writeHead(429);return res.end('{"error":"rate_limited"}')}const slug=crypto.randomUUID(),token=b64(32),hostSecretHash=await passHash(secret),c=await db.connect();try{await c.query('BEGIN');const rr=(await c.query('INSERT INTO rooms(slug,title,login_name,host_secret_hash) VALUES($1,$2,lower($4),$3) RETURNING id',[slug,title,hostSecretHash,title])).rows[0];await c.query('INSERT INTO display_tokens(room_id,token_hash) VALUES($1,$2)',[rr.id,hmac(token)]);await audit(c,rr.id,null,'room_created','ok',reqId,req);await c.query('COMMIT');sec(res);res.writeHead(201);return res.end(JSON.stringify({roomId:slug,displayToken:token}))}catch(e){await c.query('ROLLBACK');throw e}finally{c.release()}}
+const server=http.createServer(async(req,res)=>{const reqId=crypto.randomUUID();try{if(req.method==='GET'&&req.url.startsWith('/api/images/'))return await imageGet(req,res);const thumbRoute=/^\/api\/images\/([0-9a-f-]{36})\/thumbnail$/.exec(req.url);if(req.method==='POST'&&thumbRoute)return await imageThumb(req,res,thumbRoute[1],reqId);if(limited(ipBuckets,ip(req),120,60000)){sec(res);res.writeHead(429);return res.end('{"error":"rate_limited"}')}if(req.url==='/api/session')return await sessionRequest(req,res);if(req.method==='POST'&&req.url==='/api/images')return await imageUpload(req,res,reqId);if(req.method==='POST'&&req.url==='/api/quizzes')return await quizSave(req,res,reqId);if(req.method==='DELETE'&&req.url.startsWith('/api/quizzes/'))return await quizDelete(req,res,reqId);if(req.method==='POST'&&req.url==='/api/rooms'){if(!ORIGINS.includes(req.headers.origin)){sec(res);res.writeHead(403);return res.end('{"error":"origin_denied"}')}const b=await read(req),title=txt(b.roomName),secret=b.hostSecret;if(!title||typeof secret!=='string'||!((/^\d{8,16}$/.test(secret))||(secret.length>=12&&secret.length<=128))){sec(res);res.writeHead(400);return res.end('{"error":"invalid_input"}')}const client=ip(req);if(limited(roomBuckets,client,5,15*60e3)||limited(roomBuckets,'global',30,15*60e3)){sec(res);res.writeHead(429);return res.end('{"error":"rate_limited"}')}const slug=crypto.randomUUID(),token=b64(32),hostSecretHash=await passHash(secret),c=await db.connect();try{await c.query('BEGIN');const rr=(await c.query('INSERT INTO rooms(slug,title,login_name,host_secret_hash) VALUES($1,$2,lower($4),$3) RETURNING id',[slug,title,hostSecretHash,title])).rows[0];await c.query('INSERT INTO display_tokens(room_id,token_hash) VALUES($1,$2)',[rr.id,hmac(token)]);await audit(c,rr.id,null,'room_created','ok',reqId,req);await c.query('COMMIT');sec(res);res.writeHead(201);return res.end(JSON.stringify({roomId:slug,displayToken:token}))}catch(e){await c.query('ROLLBACK');throw e}finally{c.release()}}
 if(req.url==='/healthz'||req.url==='/readyz'){const c=await db.connect();try{await c.query('SELECT 1');sec(res);res.end('{"ok":true}')}finally{c.release()}return}let u=req.url.split('?')[0];if(u==='/')u='/index.html';if(u==='/vendor/html5-qrcode.min.js'){u='/vendor.js';const src=path.join(__dirname,'node_modules/html5-qrcode/html5-qrcode.min.js');sec(res,'text/javascript; charset=utf-8');return fs.createReadStream(src).pipe(res)}const f=path.normalize(path.join(PUBLIC,u));if(!f.startsWith(PUBLIC)){sec(res);res.writeHead(403);return res.end()}const types={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.webmanifest':'application/manifest+json; charset=utf-8','.png':'image/png','.svg':'image/svg+xml'};sec(res,types[path.extname(f)]||'application/octet-stream');fs.stat(f,(e,s)=>{if(e||!s.isFile()){res.writeHead(404);res.end()}else fs.createReadStream(f).pipe(res)})}catch(e){log('error','http_error',{reqId,message:e.code||e.message});if(!res.headersSent)sec(res);const status=e.code==='23505'?409:e.code==='RESOURCE_BUSY'?503:400;res.writeHead(status);res.end(status===503?'{"error":"temporarily_unavailable"}':'{"error":"request_failed"}')}});
 const wss=new WebSocketServer({noServer:true,maxPayload:16384,perMessageDeflate:false});server.on('upgrade',(req,sock,head)=>{const client=ip(req);if(!ORIGINS.includes(req.headers.origin)||limited(connections,client,8,60000)||new URL(req.url,'http://x').pathname!=='/ws'){sock.write('HTTP/1.1 403 Forbidden\r\n\r\n');return sock.destroy()}wss.handleUpgrade(req,sock,head,ws=>{ws.clientIp=client;wss.emit('connection',ws,req)})});
 async function auth(ws,m,req){
@@ -113,7 +248,7 @@ async function auth(ws,m,req){
    ws.sessionExpiresAt=Date.now()+8*60*60e3;
   }
   ws.room=room;ws.role=m.role;ws.session=sid;ws.req=req;ws.roomSlug=room.slug;ws.authed=true;
-  ws.send(JSON.stringify({type:'auth.ok',roomId:room.slug,...(raw?{sessionToken:raw}:{}),state:await state(c,room.slug)}));
+  ws.send(JSON.stringify({type:'auth.ok',roomId:room.slug,...(raw?{sessionToken:raw}:{}),state:await state(c,room.slug,undefined,m.role==='host')}));
  }finally{c.release()}
 }
 async function act(ws,m){
@@ -122,7 +257,7 @@ async function act(ws,m){
   try{
    if(m.gameId!==null&&!(await c.query('SELECT 1 FROM games WHERE room_id=$1 AND id=$2',[ws.room.id,m.gameId])).rowCount)throw Error('game');
    ws.gameId=m.gameId;
-   ws.send(JSON.stringify({type:'state',state:await state(c,ws.roomSlug,ws.gameId)}));
+   ws.send(JSON.stringify({type:'state',state:await state(c,ws.roomSlug,ws.gameId,ws.role==='host')}));
   }finally{c.release()}
   return;
  }
@@ -139,12 +274,26 @@ async function act(ws,m){
   }else if(m.type==='player.remove'){
    if(!(await c.query('UPDATE players SET deleted_at=clock_timestamp() WHERE room_id=$1 AND id=$2 AND deleted_at IS NULL',[room.id,m.playerId])).rowCount)throw Error('player');
   }else if(m.type==='game.start'){
+   const quizId=m.quizId===undefined||m.quizId===null||m.quizId===''?null:m.quizId;
    const points=integer(m.pointsPerQuestion,1,1000000);
-   if(points===null)throw Error('input');
+   let quiz=null,quizQuestions=[];
+   if(quizId!==null){
+    if(!validUuid(quizId))throw Error('quiz');
+    quiz=(await c.query('SELECT id,title FROM quizzes WHERE room_id=$1 AND id=$2',[room.id,quizId])).rows[0];
+    if(!quiz)throw Error('quiz');
+    quizQuestions=(await c.query('SELECT prompt,points,image_id FROM quiz_questions WHERE quiz_id=$1 ORDER BY ordinal',[quizId])).rows;
+    if(!quizQuestions.length)throw Error('quiz_empty');
+   }else if(points===null)throw Error('input');
    if((await c.query('SELECT 1 FROM games WHERE room_id=$1 AND ended_at IS NULL',[room.id])).rowCount)throw Error('game_running');
-   const game=(await c.query('INSERT INTO games(room_id,points_per_question) VALUES($1,$2) RETURNING id',[room.id,points])).rows[0];
-   await c.query('INSERT INTO game_questions(game_id,ordinal,points) VALUES($1,1,$2)',[game.id,points]);
-   ws.gameId=game.id;
+   if(quiz){
+    const game=(await c.query('INSERT INTO games(room_id,points_per_question,quiz_id,quiz_title,question_count) VALUES($1,$2,$3,$4,$5) RETURNING id',[room.id,quizQuestions[0].points,quiz.id,quiz.title,quizQuestions.length])).rows[0];
+    for(let i=0;i<quizQuestions.length;i++)await c.query('INSERT INTO game_questions(game_id,ordinal,points,label,prompt,image_id) VALUES($1,$2,$3,$4,$5,$6)',[game.id,i+1,quizQuestions[i].points,'Vraag '+(i+1),quizQuestions[i].prompt,quizQuestions[i].image_id]);
+    ws.gameId=game.id;
+   }else{
+    const game=(await c.query('INSERT INTO games(room_id,points_per_question) VALUES($1,$2) RETURNING id',[room.id,points])).rows[0];
+    await c.query('INSERT INTO game_questions(game_id,ordinal,points) VALUES($1,1,$2)',[game.id,points]);
+    ws.gameId=game.id;
+   }
   }else{
    const game=(await c.query('SELECT * FROM games WHERE room_id=$1 AND id=$2 AND ended_at IS NULL',[room.id,m.gameId])).rows[0];
    if(!game)throw Error('no_active_game');
@@ -153,6 +302,7 @@ async function act(ws,m){
    if(m.type==='game.stop'){
     await c.query('UPDATE games SET ended_at=clock_timestamp() WHERE id=$1',[game.id]);
    }else if(m.type==='question.next'){
+    if(game.question_count&&game.current_question>=game.question_count)throw Error('quiz_finished');
     const next=integer(game.current_question+1,1,10000);
     if(next===null)throw Error('question_limit');
     await c.query('INSERT INTO game_questions(game_id,ordinal,points) VALUES($1,$2,$3) ON CONFLICT(game_id,ordinal) DO NOTHING',[game.id,next,game.points_per_question]);
@@ -181,13 +331,13 @@ async function act(ws,m){
    }else throw Error('action');
   }
   await c.query('UPDATE rooms SET revision=revision+1,updated_at=now() WHERE id=$1',[room.id]);
-  await audit(c,room.id,ws.session,m.type,'ok',reqId,ws.req,{gameId:m.gameId,questionId:m.questionId,playerId:m.playerId,idempotencyKey:m.idempotencyKey});
+  await audit(c,room.id,ws.session,m.type,'ok',reqId,ws.req,{gameId:m.gameId,quizId:m.quizId,questionId:m.questionId,playerId:m.playerId,idempotencyKey:m.idempotencyKey});
   await c.query('COMMIT');
   if(result)ws.send(JSON.stringify(result));
-  for(const x of wss.clients)if(x.authed&&x.room?.id===room.id&&x.readyState===1)x.send(JSON.stringify({type:'state',state:await state(c,ws.roomSlug,x.gameId)}));
+  for(const x of wss.clients)if(x.authed&&x.room?.id===room.id&&x.readyState===1){try{x.send(JSON.stringify({type:'state',state:await state(c,ws.roomSlug,x.gameId,x.role==='host')}))}catch(error){log('warning','state_send_failed',{reason:error.message})}}
  }catch(e){
   await c.query('ROLLBACK');log('warning','action_rejected',{type:m.type,reason:e.code||e.message});
-  const reasons=['input','player','game_running','no_active_game','stale_question','question_limit','question','duplicate_request','nothing','action'];
+  const reasons=['input','player','game_running','no_active_game','stale_question','question_limit','question','duplicate_request','nothing','action','quiz','quiz_empty','quiz_finished'];
   ws.send(JSON.stringify({type:'error',code:'action_rejected',reason:reasons.includes(e.message)?e.message:e.code==='23505'?'duplicate_qr':'request_failed'}));
  }finally{c.release()}
 }
@@ -207,4 +357,4 @@ wss.on('connection',(ws,req)=>{
  });
  ws.on('error',e=>log('warning','ws_error',{reason:e.message}));
  ws.on('close',()=>clearTimeout(timer));
-});setInterval(async()=>{try{await db.query("DELETE FROM host_sessions WHERE expires_at<now() OR revoked_at IS NOT NULL AND revoked_at<now()-interval '7 days'")}catch{}},3600000).unref();server.listen(PORT,()=>log('info','started',{port:PORT}));
+});setInterval(async()=>{try{await db.query("DELETE FROM host_sessions WHERE expires_at<now() OR revoked_at IS NOT NULL AND revoked_at<now()-interval '7 days'");await db.query("DELETE FROM quiz_images i WHERE i.created_at<now()-interval '30 days' AND NOT EXISTS(SELECT 1 FROM quiz_questions q WHERE q.image_id=i.id) AND NOT EXISTS(SELECT 1 FROM game_questions g WHERE g.image_id=i.id)")}catch{}},3600000).unref();server.listen(PORT,()=>log('info','started',{port:PORT}));

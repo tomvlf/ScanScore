@@ -9,6 +9,14 @@ Tijdens het spel moet de quizmaster bijna uitsluitend drie dingen zien: de actie
 - **Merktaal:** indigo-violet voor actie, amber voor de winnaar, mint voor succes. Afgeronde vlakken, dunne randen en gelaagde schaduwen in plaats van zware kaders.
 - **Iconen:** één inline SVG-set, consequent lijndikte en formaat. Geen emoji als icoon.
 
+## Quizbouwer en vraagpresentatie
+- Nieuwe pagina **Quizzen** met quizkaarten, vragenlijst, punten per vraag en directe start.
+- Elke vraag heeft een tekst, één uploadbare afbeelding en een puntenwaarde; vragen zijn te herordenen.
+- Afbeeldingen hebben een sleep-/klikvlak met preview en duidelijke limieten (JPG/PNG/WebP, 5 MB).
+- De spelmodus toont de actieve vraag met afbeelding boven de scanner.
+- Het publieke scherm heeft de weergave **Vraag tonen** met de actieve vraag groot in beeld.
+- Een sessie houdt een snapshot van vraag, afbeelding en punten, zodat bewerken of verwijderen van de quiz de historiek niet wijzigt.
+
 ## Belangrijkste verbeteringen
 - Login met duidelijke scheiding tussen **Aanmelden** en **Nieuwe ruimte**, wachtwoord tonen/verbergen en een compacte mobiele hero.
 - Spelbalk met puntenpot en deel per winnaar naast de vraag, plus een scanbare pot-indicator.

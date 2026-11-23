@@ -1,4 +1,4 @@
-# ScoreScan Production v7
+# ScoreScan Production
 
 ## Installatie
 1. Voer `./scripts/generate-secrets.sh` uit. De benodigde omgevingsvariabelen met geheimen komen in `.env` (permissies `0600`).
@@ -10,10 +10,26 @@
 ## PostgreSQL-migratie
 De migraties gebruiken een PostgreSQL advisory lock en worden door de eenmalige `migrate`-service uitgevoerd. Spelstarts, spelers en QR-koppelingen blijven aan hun ruimte gekoppeld. `SELECT ... FOR UPDATE` serialiseert wijzigingen binnen één quizruimte. Een UUID-idempotency key voorkomt dat dezelfde scanrequest tweemaal wordt verwerkt.
 
-## Spellen en punten
-Per ruimte kan één spel tegelijk actief zijn. De spelmeester stelt bij het starten de puntenpot per vraag in; nieuwe spellen beginnen met nul punten. De spelerslijst en persoonlijke QR-koppelingen blijven aan de ruimte verbonden.
+## Quizzen en afbeeldingen
+Een ruimte kan meerdere quizzes bevatten. Elke quiz bestaat uit vragen met een
+tekst, een afbeelding (JPG, PNG of WebP, maximaal 5 MB) en een puntenwaarde.
+Afbeeldingen worden als onveranderlijke assets in PostgreSQL bewaard en zitten
+dus automatisch in de databaseback-up. De reverse proxy moet request bodies van
+minimaal 6 MB doorlaten.
 
-Winnaars worden per vraag bijgehouden. Hun aandeel is steeds de puntenpot gedeeld door het aantal winnaars. Een nieuwe scan herverdeelt alle aandelen direct; breukdelen worden intern bewaard en op het scherm afgerond tot twee decimalen. De volgende vraag opent pas wanneer de spelmeester daarvoor kiest. Een eerdere vraag kan tijdens het spel worden geopend, waarna winnaars kunnen worden verwijderd of opnieuw gescand.
+Bij het starten van een sessie worden de quizvraag, afbeelding en punten in het
+spel gekopieerd. Later bewerken of verwijderen van de quiz verandert lopende of
+afgesloten sessies niet. Een quiz blijft herbruikbaar voor nieuwe sessies. Het
+publieke scorebord heeft de weergave **Vraag tonen** om de actieve vraag groot
+te presenteren.
+
+## Spellen en punten
+Per ruimte kan één spel tegelijk actief zijn. Bij een quizsessie komen de punten
+per vraag uit de quiz; bij een snel spel stelt de spelmeester één puntenpot in.
+Nieuwe spellen beginnen met nul punten. De spelerslijst en persoonlijke
+QR-koppelingen blijven aan de ruimte verbonden.
+
+Winnaars worden per vraag bijgehouden. Hun aandeel is steeds de puntenpot van die vraag gedeeld door het aantal winnaars. Een nieuwe scan herverdeelt alle aandelen direct; breukdelen worden intern bewaard en op het scherm afgerond tot twee decimalen. De volgende vraag opent pas wanneer de spelmeester daarvoor kiest. Bij de laatste vraag rondt hij de quiz af. Een eerdere vraag kan tijdens het spel worden geopend, waarna winnaars kunnen worden verwijderd of opnieuw gescand.
 
 Gestopte spellen worden bewaard voor het scorebord en zijn alleen-lezen. Historische score-events uit oudere versies worden bij de database-upgrade als onveranderbare historische spelresultaten bewaard.
 

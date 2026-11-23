@@ -76,9 +76,15 @@
 
     <div class="board-controls">
       <label>Spel<select id="gameHistory"><option value="">Actief / meest recente spel volgen</option></select></label>
-      <label>Weergave<select id="scoreView"><option value="total">Totaalpunten</option><option value="questions">Punten per vraag</option></select></label>
+      <label>Weergave<select id="scoreView"><option value="total">Totaalpunten</option><option value="questions">Punten per vraag</option><option value="question">Vraag tonen</option></select></label>
     </div>
 
+    <section id="questionStage" class="question-stage hidden" aria-live="polite">
+      <span class="eyebrow" id="stageEyebrow">Huidige vraag</span>
+      <div id="stageMedia" class="stage-media hidden"><img id="stageImage" alt=""></div>
+      <h2 id="stagePrompt"></h2>
+      <p id="stageMeta" class="stage-meta"></p>
+    </section>
     <div id="podium" class="podium" aria-label="Top drie"></div>
     <ol id="scoreList" class="scorelist boardlist" aria-label="Klassement"></ol>
     <div id="scoreTable" class="scoretable hidden"></div>

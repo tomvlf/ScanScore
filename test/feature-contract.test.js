@@ -14,6 +14,12 @@ test('runtime role is least privileged',()=>{for(const x of ['GRANT SELECT,INSER
 test('websocket and browser security controls are present',()=>{for(const x of ['maxPayload:16384','perMessageDeflate:false','Content-Security-Policy','X-Content-Type-Options','Strict-Transport-Security','ORIGINS.includes','timingSafeEqual'])has(server,x)});
 test('operations and environment variable isolation are wired',()=>{for(const x of ['DATABASE_URL','SECRET_PEPPER','QR_ENCRYPTION_KEY','/healthz','/readyz'])has(server,x);for(const x of ['RUNTIME_DATABASE_URL','OWNER_DATABASE_URL','privilege-test','internal: true'])has(compose,x);assert.ok(!compose.includes('/run/secrets/'))});
 test('responsive and accessible UI affordances exist',()=>{for(const x of ['aria-live','class="mobile','class="skip','id="feedback"'])has(html,x);for(const x of ['prefers-reduced-motion','prefers-color-scheme','focus-visible','@media(max-width:650px)'])has(css,x)});
+test('quiz builder, image uploads and public question view are wired',()=>{
+ for(const x of ["'/api/images'","'/api/quizzes'",'quiz_images','quiz_questions','question_count','quiz_finished'])has(server,x);
+ for(const id of ['quizzes','quizEditor','quizSelect','currentQuestion','newQuiz','saveQuiz','addQuestion','quizList','quizTitleInput'])has(html,`id="${id}"`);
+ for(const x of ['id="questionStage"','id="stageImage"','id="stagePrompt"','value="question"'])has(board,x);
+ for(const x of ['quiz-card','question-stage','image-drop'])has(css,x);
+});
 test('feature matrix is non-empty and categorized',()=>{const m=JSON.parse(fs.readFileSync('test/feature-matrix.json'));assert.ok(Object.keys(m).length>=8);for(const [k,v] of Object.entries(m))assert.ok(v.length>0,`${k} empty`)});
 test('presentation surfaces expose podium, confirmation and display tools',()=>{
  for(const x of ['id="podium"','id="confirmDialog"','id="copyDisplay"','id="roomTitle"','id="returnToGame"'])has(html,x);

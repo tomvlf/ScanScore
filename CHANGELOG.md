@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Quizbouwer met vragen, uploadbare afbeeldingen (met thumbnails) en punten per vraag.
+- Quizsessies met snapshot van vraag en afbeelding; laatste vraag rondt de quiz af.
+- Publieke scorebordweergave **Vraag tonen** met de actieve vraag groot in beeld.
 - UX-vernieuwing voor spelbediening, deelnemers, scores en het publieke scherm.
 - Podium, relatieve scorebalken en gemarkeerde huidige vraag in het klassement.
 - Snelle puntenkeuzes, wachtwoord tonen/verbergen en bevestigingsdialoog.

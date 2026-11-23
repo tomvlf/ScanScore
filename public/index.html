@@ -34,6 +34,10 @@
  <symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></symbol>
  <symbol id="i-history" viewBox="0 0 24 24"><path d="M3.5 12a8.5 8.5 0 1 0 2.6-6.1"/><path d="M3.5 4.5V9H8"/><path d="M12 7.5V12l3 2"/></symbol>
  <symbol id="i-tv" viewBox="0 0 24 24"><rect x="2.5" y="4.5" width="19" height="13" rx="2"/><path d="M8 21h8M12 17.5V21"/></symbol>
+ <symbol id="i-list" viewBox="0 0 24 24"><path d="M9 6h12M9 12h12M9 18h12"/><circle cx="4" cy="6" r="1.2"/><circle cx="4" cy="12" r="1.2"/><circle cx="4" cy="18" r="1.2"/></symbol>
+ <symbol id="i-image" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2.2"/><circle cx="8.5" cy="9" r="1.6"/><path d="M3.5 17l5-5 3.5 3.5 3-3 5 5.5"/></symbol>
+ <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 16V4M7.5 8.5L12 4l4.5 4.5"/><path d="M4 15v4a1.5 1.5 0 0 0 1.5 1.5h13A1.5 1.5 0 0 0 20 19v-4"/></symbol>
+ <symbol id="i-arrow-left" viewBox="0 0 24 24"><path d="M20 12H5M11 6l-6 6 6 6"/></symbol>
  <symbol id="i-stop" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/></symbol>
  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4.5h6V7M6.5 7l.8 12a1.5 1.5 0 0 0 1.5 1.4h6.4a1.5 1.5 0 0 0 1.5-1.4l.8-12M10 11v5M14 11v5"/></symbol>
  <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M4 12h15M13 6l6 6-6 6"/></symbol>
@@ -108,8 +112,9 @@
  <section id="app" class="app hidden">
   <aside class="rail" aria-label="Hoofdnavigatie">
     <span class="rail-label">Spelstudio</span>
-    <button class="nav active" type="button" data-page="play"><svg class="icon" aria-hidden="true"><use href="#i-play"/></svg><span>Spelen</span></button>
+    <button class="nav active" type="button" data-page="play" aria-current="page"><svg class="icon" aria-hidden="true"><use href="#i-play"/></svg><span>Spelen</span></button>
     <button class="nav" type="button" data-page="players"><svg class="icon" aria-hidden="true"><use href="#i-users"/></svg><span>Deelnemers</span></button>
+    <button class="nav" type="button" data-page="quizzes"><svg class="icon" aria-hidden="true"><use href="#i-list"/></svg><span>Quizzen</span></button>
     <button class="nav" type="button" data-page="scores"><svg class="icon" aria-hidden="true"><use href="#i-trophy"/></svg><span>Scores</span></button>
     <button class="nav" type="button" data-page="more"><svg class="icon" aria-hidden="true"><use href="#i-more"/></svg><span>Meer</span></button>
     <a id="display" class="nav nav-link" target="_blank" rel="noopener"><svg class="icon" aria-hidden="true"><use href="#i-tv"/></svg><span>Publiek scherm</span><svg class="icon" aria-hidden="true"><use href="#i-external"/></svg></a>
@@ -132,20 +137,31 @@
     </div>
     <p id="poolInfo" class="pool-info" role="status"></p>
 
+    <section id="currentQuestion" class="card question-card hidden">
+      <div id="questionMedia" class="question-card-media hidden"><img id="questionImage" alt=""></div>
+      <div class="question-card-copy">
+        <span class="eyebrow" id="questionLabel">Vraag</span>
+        <h2 id="questionPrompt"></h2>
+        <p id="questionMeta" class="muted"></p>
+      </div>
+    </section>
+
     <form id="gameForm" class="card game-start">
       <div class="game-start-head">
         <span class="icon-tile"><svg class="icon" aria-hidden="true"><use href="#i-play"/></svg></span>
-        <div><h2>Nieuw spel starten</h2><p class="muted">Scores beginnen op nul. Spelers, QR-kaarten en eerdere spellen blijven bewaard.</p></div>
+        <div><h2>Start een sessie</h2><p class="muted">Kies een quiz of start een snel spel. Spelers, QR-kaarten en eerdere spellen blijven bewaard.</p></div>
       </div>
+      <label class="field quiz-pick"><span>Quiz</span><select id="quizSelect"></select></label>
+      <p id="quizHint" class="hint">Kies een quiz, of laat dit leeg voor een snel spel zonder voorbereide vragen.</p>
       <div class="game-start-row">
-        <label class="field"><span>Puntenpot per vraag</span><span class="input-wrap"><input id="pointsPerQuestion" type="number" min="1" max="1000000" step="1" required placeholder="Bijv. 50"></span></label>
-        <div class="presets" role="group" aria-label="Snelle puntenkeuzes">
+        <label class="field" id="pointsField"><span>Puntenpot per vraag</span><span class="input-wrap"><input id="pointsPerQuestion" type="number" min="1" max="1000000" step="1" required placeholder="Bijv. 50"></span></label>
+        <div class="presets" id="presets" role="group" aria-label="Snelle puntenkeuzes">
           <button class="chip" type="button" data-points="25">25</button>
           <button class="chip" type="button" data-points="50">50</button>
           <button class="chip" type="button" data-points="75">75</button>
           <button class="chip" type="button" data-points="100">100</button>
         </div>
-        <button id="startGame" class="primary" type="submit"><svg class="icon" aria-hidden="true"><use href="#i-play"/></svg>Spel starten</button>
+        <button id="startGame" class="primary" type="submit"><svg class="icon" aria-hidden="true"><use href="#i-play"/></svg><span id="startGameLabel">Spel starten</span></button>
       </div>
     </form>
 
@@ -180,7 +196,7 @@
 
     <div id="playActions" class="play-actions hidden">
       <div><span id="nextHint">Klaar met scannen?</span><small id="nextSub">De volgende vraag begint met een lege winnaarslijst.</small></div>
-      <button id="next" class="primary" type="button">Volgende vraag<svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></button>
+      <button id="next" class="primary" type="button"><span id="nextLabel">Volgende vraag</span><svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></button>
     </div>
 
     <details id="gameControls" class="card question-controls hidden">
@@ -209,6 +225,27 @@
     </section>
     <div class="players-head"><h2>In deze ruimte</h2><span class="muted">Verwijderen laat behaalde punten in de spelhistoriek staan.</span></div>
     <div id="playerCards" class="playergrid"></div>
+   </section>
+
+   <section id="quizzes" class="page">
+    <div class="pagehead">
+      <div class="pagehead-copy"><span class="eyebrow">Quizbouwer</span><h1>Quizzen</h1><p class="muted">Bouw quizzes met eigen vragen, afbeeldingen en punten. Je kunt ze daarna steeds opnieuw spelen.</p></div>
+      <div class="pagehead-actions"><button id="newQuiz" class="primary" type="button"><svg class="icon" aria-hidden="true"><use href="#i-plus"/></svg>Nieuwe quiz</button></div>
+    </div>
+    <div id="quizList" class="quizgrid"></div>
+    <section id="quizEditor" class="card quiz-editor hidden">
+      <div class="quiz-editor-head">
+        <button id="closeQuizEditor" class="ghost" type="button"><svg class="icon" aria-hidden="true"><use href="#i-arrow-left"/></svg>Terug</button>
+        <div><span class="eyebrow">Quizbewerker</span><h2 id="quizEditorTitle">Nieuwe quiz</h2></div>
+        <button id="saveQuiz" class="primary" type="button"><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg>Quiz opslaan</button>
+      </div>
+      <label class="field quiz-title-field"><span>Quiztitel</span><input id="quizTitleInput" maxlength="120" placeholder="Bijv. Film & TV avond" autocomplete="off"></label>
+      <div id="quizQuestions" class="question-editor"></div>
+      <div class="quiz-editor-foot">
+        <button id="addQuestion" class="secondary" type="button"><svg class="icon" aria-hidden="true"><use href="#i-plus"/></svg>Vraag toevoegen</button>
+        <p id="quizStatus" class="hint" role="status" aria-live="polite">Elke vraag heeft een tekst, afbeelding en puntenwaarde nodig.</p>
+      </div>
+    </section>
    </section>
 
    <section id="scores" class="page">
@@ -258,8 +295,9 @@
 </main>
 
 <nav id="mobileNav" class="mobile hidden" aria-label="Navigatie">
-  <button class="active" type="button" data-page="play"><svg class="icon" aria-hidden="true"><use href="#i-play"/></svg>Spelen</button>
+  <button class="active" type="button" data-page="play" aria-current="page"><svg class="icon" aria-hidden="true"><use href="#i-play"/></svg>Spelen</button>
   <button type="button" data-page="players"><svg class="icon" aria-hidden="true"><use href="#i-users"/></svg>Spelers</button>
+  <button type="button" data-page="quizzes"><svg class="icon" aria-hidden="true"><use href="#i-list"/></svg>Quizzen</button>
   <button type="button" data-page="scores"><svg class="icon" aria-hidden="true"><use href="#i-trophy"/></svg>Scores</button>
   <button type="button" data-page="more"><svg class="icon" aria-hidden="true"><use href="#i-more"/></svg>Meer</button>
 </nav>
