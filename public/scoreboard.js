@@ -5,7 +5,6 @@
 const $ = s => document.querySelector(s);
 
 let ws, state;
-let reconnectAttempt = 0, reconnectTimer;
 
 function setStatus(text, online) {
   const status = $('#status');
@@ -146,49 +145,21 @@ async function connect(resume = false) {
     socket.onmessage = event => {
       if (ws !== socket) return;
       const message = JSON.parse(event.data);
-      if ((message.type === 'auth.ok' || message.type === 'state') && (!state || message.state.revision >= state.revision)) {
-        reconnectAttempt = 0;
-        clearTimeout(reconnectTimer);
-        render(message.state);
-      }
+      if ((message.type === 'auth.ok' || message.type === 'state') && (!state || message.state.revision >= state.revision)) render(message.state);
     };
     socket.onclose = event => {
       if (ws !== socket) return;
       setStatus('Offline', false);
-      if (event.code === 4401 || event.code === 4403) {
-        reconnectAttempt = 0;
-        clearTimeout(reconnectTimer);
-        $('#auth').classList.remove('hidden');
-        $('#board').classList.add('hidden');
-        $('#logout').classList.add('hidden');
-        document.body?.classList.remove('display-question');
-        state = null;
-        $('#authMessage').classList.remove('hidden');
-        $('#authMessage').textContent = event.code === 4401
-          ? 'Je aanmelding is verlopen. Meld je opnieuw aan.'
-          : 'Je aanmelding kon niet worden bevestigd. Probeer opnieuw.';
-      } else if (++reconnectAttempt <= 3) {
-        const delay = 1000 * reconnectAttempt;
-        setStatus('Verbinding herstellen…', false);
-        $('#updated').textContent = `Opnieuw verbinden (${reconnectAttempt}/3)…`;
-        reconnectTimer = setTimeout(async () => {
-          try {
-            const session = await roomSession.restore('display');
-            if (session) return await connect(session);
-            throw Error('Je aanmelding is verlopen. Meld je opnieuw aan.');
-          } catch (error) {
-            $('#auth').classList.remove('hidden');
-            $('#board').classList.add('hidden');
-            $('#logout').classList.add('hidden');
-            document.body?.classList.remove('display-question');
-            state = null;
-            $('#authMessage').classList.remove('hidden');
-            $('#authMessage').textContent = error.message || 'Verbinding herstellen mislukt. Meld je opnieuw aan.';
-          }
-        }, delay);
-      } else {
-        $('#updated').textContent = 'Verbinding herstellen mislukt. Vernieuw de pagina.';
-      }
+      $('#updated').textContent = 'Verbinding verbroken. Vernieuw de pagina om de verbinding te herstellen.';
+      $('#auth').classList.remove('hidden');
+      $('#board').classList.add('hidden');
+      $('#logout').classList.add('hidden');
+      document.body?.classList.remove('display-question');
+      state = null;
+      $('#authMessage').classList.remove('hidden');
+      $('#authMessage').textContent = event.code === 4401
+        ? 'Je aanmelding is verlopen. Meld je opnieuw aan.'
+        : event.code === 4403 ? 'Je aanmelding kon niet worden bevestigd. Probeer opnieuw.' : 'Geen verbinding. Probeer opnieuw.';
     };
   } catch (error) {
     $('#authMessage').classList.remove('hidden');

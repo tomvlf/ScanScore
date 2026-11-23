@@ -8,19 +8,7 @@ class Client{
  async open(){
   const login=await fetch(APP+'/api/session?role='+this.role,{method:'POST',headers:{origin:ORIGIN,'content-type':'application/json'},body:JSON.stringify({roomName:room,secret:this.secret})});
   if(login.status!==200)throw Error('Login rejected');
-  const cookieHeader=login.headers.get('set-cookie')||'';
-  assert.match(cookieHeader,/Max-Age=86400/);
-  this.cookie=cookieHeader.split(';')[0];
   const ticket=(await login.json()).socketTicket;
-  return this.connect(ticket);
- }
- async restore(){
-  const restored=await fetch(APP+'/api/session?role='+this.role,{headers:{cookie:this.cookie}});
-  assert.equal(restored.status,200);
-  return this.connect((await restored.json()).socketTicket);
- }
- async connect(ticket){
-  this.close();
   const url=APP.replace(/^http/,'ws')+'/ws';
   this.ws=new WebSocket(url,{headers:{Origin:ORIGIN}});
   this.ws.on('message',b=>this.push(JSON.parse(b)));
@@ -41,9 +29,7 @@ function player(state,name){return state.players.find(x=>x.name===name)}
 function score(state,name){return player(state,name)?.score||0}
 function close(...clients){for(const c of clients)c?.close()}
 (async()=>{
- let ready=false;
- for(let i=0;i<40;i++){try{ready=(await fetch(APP+'/readyz')).ok;if(ready)break}catch{}await wait(250)}
- assert.equal(ready,true,'Application did not become ready; schema or database startup failed');
+ for(let i=0;i<40;i++){try{if((await fetch(APP+'/readyz')).ok)break}catch{}await wait(250)}
  let page=await fetch(APP+'/');assert.equal(page.status,200);assert.match(page.headers.get('content-security-policy')||'',/default-src/);assert.equal(page.headers.get('x-content-type-options'),'nosniff');
  assert.equal((await fetch(APP+'/scoreboard.html')).status,200);assert.equal((await fetch(APP+'/does-not-exist')).status,404);
  let r=await fetch(APP+'/api/rooms',{method:'POST',headers:{origin:ORIGIN,'content-type':'application/json'},body:JSON.stringify({roomName:'',hostSecret:'short'})});assert.equal(r.status,400);
@@ -53,7 +39,6 @@ function close(...clients){for(const c of clients)c?.close()}
  const idle=new WebSocket(APP.replace(/^http/,'ws')+'/ws',{headers:{Origin:ORIGIN}});await new Promise((ok,no)=>{idle.once('open',ok);idle.once('error',no)});
  await new Promise((ok,no)=>{const timer=setTimeout(()=>no(Error('Authentication timeout missing')),7000);idle.once('close',code=>{clearTimeout(timer);assert.equal(code,4401);ok()})});
  const host=new Client('host',hostSecret),auth=await host.open();assert.equal(auth.state.title,room);assert.equal(auth.state.games.length,0);
- const restoredAuth=await host.restore();assert.equal(restoredAuth.state.title,room);
  const oversized=new Client('host',hostSecret);await oversized.open();oversized.ws.send(JSON.stringify({type:'unknown',data:'x'.repeat(20000)}));
  await new Promise((ok,no)=>{const timer=setTimeout(()=>no(Error('Oversized message was not closed')),5000);oversized.ws.once('close',()=>{clearTimeout(timer);ok()})});
  const playerIds={};

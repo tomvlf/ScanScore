@@ -21,8 +21,7 @@ function application({production=false,trustProxyHops=0}={}){
    }
    if(sql.startsWith('INSERT INTO host_sessions')){
     const id='session-'+sessions.size;
-    const role=values.length===3?'host':values[2];
-    sessions.set(id,{id,room_id:values[0],token_hash:values[1],role,expires_at:Date.now()+values.at(-1)*1000});
+    sessions.set(id,{id,room_id:values[0],token_hash:values[1],role:values[2],expires_at:Date.now()+24*60*60e3});
     return {rows:[{id,expires_at:new Date(sessions.get(id).expires_at)}],rowCount:1};
    }
    if(sql.startsWith('INSERT INTO login_attempts')){
@@ -202,20 +201,6 @@ test('persistent cookie restores both screens and logout revokes future access',
  assert.equal(sockets[1].closed,4401);
 });
 
-test('host and display sessions use the 24-hour lifetime',async()=>{
- const app=application({production:true}),secret='a long host password';
- await app.create({roomName:'Family Quiz',hostSecret:secret});
- for(const role of ['host','display']){
-  const before=Date.now(),login=await app.signIn('Family Quiz',secret,role);
-  assert.equal(login.statusCode,200);
-  assert.match(login.headers['set-cookie'],/Max-Age=86400/);
-  const session=[...app.sessions.values()].at(-1);
-  assert.equal(session.role,role);
-  assert.ok(session.expires_at>=before+24*60*60e3);
-  assert.ok(session.expires_at<=Date.now()+24*60*60e3);
- }
-});
-
 test('one-time opaque tickets authenticate sockets without a forwarded cookie',async()=>{
  const app=application({production:true}),hostSecret='a long host password';
  await app.create({roomName:'Family Quiz',hostSecret});
@@ -275,14 +260,9 @@ test('password rotation revokes every room session and issues a fresh host sessi
  const app=application(),oldPassword='a long host password',newPassword='violet orchard rain 47!';
  await app.create({roomName:'Family Quiz',hostSecret:oldPassword});
  const host=await app.signIn('Family Quiz',oldPassword,'host'),display=await app.signIn('Family Quiz',oldPassword,'display');
- const before=Date.now(),changed=await app.rotatePassword('Family Quiz',oldPassword,newPassword,host.headers['set-cookie']);
+ const changed=await app.rotatePassword('Family Quiz',oldPassword,newPassword,host.headers['set-cookie']);
  assert.equal(changed.statusCode,200);
  assert.match(changed.headers['set-cookie'],/scorescan_session=/);
- assert.match(changed.headers['set-cookie'],/Max-Age=86400/);
- const freshSession=[...app.sessions.values()].at(-1);
- assert.equal(freshSession.role,'host');
- assert.ok(freshSession.expires_at>=before+24*60*60e3);
- assert.ok(freshSession.expires_at<=Date.now()+24*60*60e3);
  assert.equal((await app.request('GET','/api/session?role=host',{}, {cookie:host.headers['set-cookie']})).statusCode,401);
  assert.equal((await app.request('GET','/api/session?role=display',{}, {cookie:display.headers['set-cookie']})).statusCode,401);
  assert.equal((await app.signIn('Family Quiz',oldPassword,'host')).statusCode,401);

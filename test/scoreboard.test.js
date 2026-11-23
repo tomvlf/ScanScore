@@ -45,7 +45,7 @@ test('podium shows the top three, highlights the leader and escapes names',()=>{
 });
 
 async function scoreboard({savedSession=null,loginStatus=200,sessionResponse=null}={}){
- const elements=new Map(),sockets=[],requests=[],timers=[],location={protocol:'https:',host:'quiz.example.test'};
+ const elements=new Map(),sockets=[],requests=[],location={protocol:'https:',host:'quiz.example.test'};
  const document={
   querySelector(selector){
    if(!elements.has(selector)){
@@ -70,10 +70,10 @@ async function scoreboard({savedSession=null,loginStatus=200,sessionResponse=nul
     ?{roomName:'Family Quiz',socketTicket:'signed-ticket'}
     :{roomName:'Family Quiz'});
    return {status,ok:status===200,json:async()=>response};
- },setTimeout(callback,delay){const timer={callback,delay,cleared:false};timers.push(timer);return timer},clearTimeout(timer){if(timer)timer.cleared=true}});
+ }});
  for(const file of ['scores.js','session.js','scoreboard.js'])vm.runInContext(fs.readFileSync('public/'+file,'utf8'),browser);
  await new Promise(setImmediate);
- return {$:selector=>document.querySelector(selector),sockets,requests,timers,location};
+ return {$:selector=>document.querySelector(selector),sockets,requests,location};
 }
 
 test('scoreboard uses room credentials, clears the password and opens a read-only connection',async()=>{
@@ -118,17 +118,4 @@ test('scoreboard shows invalid credentials and returns to login when a session e
  assert.equal(expired.$('#auth').classList.contains('hidden'),false);
  assert.equal(expired.$('#board').classList.contains('hidden'),true);
  assert.match(expired.$('#authMessage').textContent,/aanmelding is verlopen/);
-});
-
-test('scoreboard restores a new ticket after a transient disconnect',async()=>{
- const app=await scoreboard({savedSession:{roomName:'Family Quiz',socketTicket:'restored-ticket'}});
- const original=app.sockets[0];
- original.onmessage({data:JSON.stringify({type:'auth.ok',state:{title:'Family Quiz',games:[],players:[],game:null,revision:1}})});
- original.onclose({code:1011});
- const retry=app.timers.find(timer=>!timer.cleared&&timer.delay===1000);
- assert.ok(retry);
- await retry.callback();
- assert.equal(app.sockets.length,2);
- app.sockets[1].onopen();
- assert.deepEqual(app.sockets[1].messages,[{type:'auth',role:'display',socketTicket:'restored-ticket'}]);
 });

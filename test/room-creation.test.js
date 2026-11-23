@@ -3,7 +3,7 @@ const test=require('node:test'),assert=require('node:assert/strict'),fs=require(
 const app=fs.readFileSync('public/app.js','utf8');
 
 function browser(fetch,{savedSession=null,loginStatus=200,sessionResponse=null,sessionFetch=null}={}){
- const elements=new Map(),sockets=[],sessionRequests=[],timers=[];
+ const elements=new Map(),sockets=[],sessionRequests=[];
  const document={
   querySelector(selector){
    if(!elements.has(selector)){
@@ -28,14 +28,14 @@ function browser(fetch,{savedSession=null,loginStatus=200,sessionResponse=null,s
    ?{roomName:'Family Quiz',socketTicket:'signed-ticket'}
    :{roomName:'Family Quiz'});
   return {status,ok:status===200,json:async()=>response};
- },WebSocket,location:{protocol:'https:',host:'quiz.example.test'},confirm(){return true},setTimeout(callback,delay){const timer={callback,delay,cleared:false};timers.push(timer);return timer},clearTimeout(timer){if(timer)timer.cleared=true}});
+ },WebSocket,location:{protocol:'https:',host:'quiz.example.test'},confirm(){return true},setTimeout(){},clearTimeout(){}});
  vm.runInContext(fs.readFileSync('public/session.js','utf8'),context);
  vm.runInContext(fs.readFileSync('public/scores.js','utf8'),context);
  vm.runInContext(app,context);
  const $=selector=>document.querySelector(selector);
  $('#roomName').value='Family Quiz';$('#secret').value='a long host password';
  $('#scoreView').value='total';
- return {$,sockets,sessionRequests,timers};
+ return {$,sockets,sessionRequests};
 }
 
 test('duplicate room name explains how to create a different room or sign in',async()=>{
@@ -117,30 +117,6 @@ test('hosts authenticate the new socket once with a short-lived ticket',async()=
  await $('#loginForm').onsubmit({preventDefault(){}});
  sockets[0].onopen();
  assert.deepEqual(sockets[0].messages,[{type:'auth',role:'host',socketTicket:'signed-ticket'}]);
-});
-
-test('hosts restore a new socket ticket after a transient disconnect',async()=>{
- let getRequests=0;
- const app=browser(()=>assert.fail('Unexpected fetch'),{
-  sessionFetch:async options=>{
-   if(options.method==='POST')return {status:200,ok:true,json:async()=>({roomName:'Family Quiz',socketTicket:'login-ticket'})};
-   getRequests++;
-   return getRequests===1
-    ?{status:401,ok:false,json:async()=>({error:'session_expired'})}
-    :{status:200,ok:true,json:async()=>({roomName:'Family Quiz',socketTicket:'restored-ticket'})};
-  }
- });
- await new Promise(setImmediate);
- await app.$('#loginForm').onsubmit({preventDefault(){}});
- app.sockets[0].onmessage({data:JSON.stringify({type:'auth.ok',roomId:'room',state:{games:[],game:null,activeGameId:null,players:[],revision:1}})});
- app.sockets[0].onclose({code:1011});
- const retry=app.timers.find(timer=>!timer.cleared&&timer.delay===1000);
- assert.ok(retry);
- await retry.callback();
- assert.equal(app.sockets.length,2);
- app.sockets[1].onopen();
- assert.deepEqual(app.sockets[1].messages,[{type:'auth',role:'host',socketTicket:'restored-ticket'}]);
- assert.equal(app.sessionRequests.filter(request=>request.method==='GET').length,2);
 });
 
 test('a slow boot restore cannot replace the ticket from a newly created room',async()=>{
