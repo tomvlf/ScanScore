@@ -246,24 +246,30 @@ appbestanden gecachet; nieuwe versies worden bij het openen opgehaald.
 Vul in het startscherm in:
 
 - een unieke ruimtenaam van maximaal 80 tekens, bijvoorbeeld `Familiequiz`;
-- een hostwachtwoord van minstens 12 tekens of 8–16 cijfers.
+- een hostwachtwoord of wachtzin van minstens 16 tekens.
 
 Klik op **Ruimte maken**. Je wordt automatisch aangemeld met de gekozen
-ruimtenaam en het wachtwoord. Je blijft op dit apparaat 30 dagen aangemeld,
+ruimtenaam en het wachtwoord. Je blijft op dit apparaat maximaal 24 uur aangemeld,
 ook na vernieuwen of het heropenen van de browser. Daarna vul je dezelfde naam en
 hetzelfde wachtwoord in en klik je op **Aanmelden**. Hoofdletters in de
 ruimtenaam maken geen verschil; spaties aan het begin en einde worden genegeerd.
 
 Bestaat de ruimtenaam al? Kies een andere naam voor een nieuwe ruimte, of meld
-je aan met het oorspronkelijke wachtwoord. Bestaande ruimtes behouden hun
-wachtwoord en spelgegevens. Hun quiznaam wordt de aanmeldnaam; bij dubbele
-quiznamen of een conflict met een bestaand ruimte-ID blijft het oude ruimte-ID
-de aanmeldnaam.
+je aan met het wachtwoord van die ruimte.
 
-De aanmelding gebruikt een intrekbare HttpOnly-cookie; het wachtwoord wordt niet
-in browseropslag bewaard. **Afmelden** trekt deze browsersessie voor beide
-schermen in. Gebruik dit op gedeelde apparaten. Privévensters en het wissen van
-cookies kunnen de aanmelding eerder verwijderen.
+De aanmelding gebruikt een intrekbare `Secure`, `HttpOnly`-cookie. Het wachtwoord
+wordt alleen via HTTPS naar de loginroute verstuurd en niet in browseropslag
+of over de WebSocket verstuurd. Na de HTTPS-login ontvangt de browser een
+rollen- en sessiegebonden ticket van 30 seconden dat exact één keer gebruikt kan
+worden om de WebSocket te openen. Loginpogingen worden per client en ruimte
+databasegewijs begrensd, zodat herstarten of meerdere app-instanties de limiet
+niet resetten. **Afmelden** trekt deze browsersessie en alle open tickets in.
+Gebruik dit op gedeelde apparaten; privévensters en het wissen van cookies kunnen
+de aanmelding eerder verwijderen.
+
+Onder **Meer** kun je het gedeelde wachtwoord wijzigen of alle actieve sessies
+intrekken. Beide acties vereisen een geldige host-sessie. Een wachtwoordwijziging
+trekt alle bestaande host- en displaysessies onmiddellijk in.
 
 ## Deelnemers registreren en beheren
 
@@ -311,15 +317,16 @@ https://quiz.jouwdomein.be/scoreboard.html
 ```
 
 Vul dezelfde ruimtenaam en hetzelfde wachtwoord in als op het bedieningsscherm.
-Op hetzelfde apparaat wordt je bestaande aanmelding automatisch hergebruikt.
-Ook dit scherm blijft na vernieuwen of heropenen aangemeld. Het scorebord kan
+De scoreboardsessie is aan de `display`-rol gebonden en kan niet zonder een
+nieuwe aanmelding naar een host-sessie worden omgezet. Ook dit scherm blijft na
+vernieuwen of heropenen aangemeld. Het scorebord kan
 geen deelnemers of scores wijzigen. Kies **Totaalpunten**, **Punten per vraag** of **Vraag tonen** en selecteer
 desgewenst een eerder spel. **Vraag tonen** zet de actieve vraag met afbeelding
 groot in beeld, ideaal tijdens het antwoorden.
 
 Het gedeelde wachtwoord geeft ook toegang tot de spelbediening: deel het alleen
-met vertrouwde personen. De oude displaytoken-aanmelding blijft voor bestaande
-API-clients beschikbaar, maar is niet meer nodig in de gebruikersinterface.
+met vertrouwde personen. Wachtwoorden worden niet langer rechtstreeks op de
+WebSocket geaccepteerd.
 
 ---
 
@@ -490,7 +497,7 @@ semantische versietags `1.0.0` en `1.0` in GitHub Container Registry.
 - [Bijdragen](CONTRIBUTING.md)
 - [Changelog](CHANGELOG.md)
 
-Meld beveiligingsproblemen privé. Plaats nooit wachtwoorden, displaytokens, QR-codes, databasedumps of persoonsgegevens in een openbaar issue.
+Meld beveiligingsproblemen privé. Plaats nooit wachtwoorden, WebSocket-tickets, QR-codes, databasedumps of persoonsgegevens in een openbaar issue.
 
 ## Licentie
 

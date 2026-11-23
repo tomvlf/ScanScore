@@ -3,7 +3,7 @@ const test=require('node:test'),assert=require('node:assert/strict'),fs=require(
 const source=fs.readFileSync('server.js','utf8');
 
 function application({production=false,trustProxyHops=0}={}){
- const rooms=new Map(),sessions=new Map(),tickets=new Map();let handle;
+ const rooms=new Map(),sessions=new Map(),tickets=new Map(),attempts=new Map();let handle;
  const client={
   async query(sql,values=[]){
    if(sql.startsWith('INSERT INTO rooms')){
@@ -13,39 +13,58 @@ function application({production=false,trustProxyHops=0}={}){
     rooms.set(login_name,room);return {rows:[room],rowCount:1};
    }
    if(sql.startsWith('SELECT * FROM rooms')){
-    const room=sql.includes('login_name')?rooms.get(values[0].toLowerCase()):[...rooms.values()].find(r=>r.slug===values[0]);
+    const room=sql.includes('WHERE id=$1')?[...rooms.values()].find(r=>r.id===values[0]):sql.includes('login_name')?rooms.get(values[0].toLowerCase()):[...rooms.values()].find(r=>r.slug===values[0]);
     return {rows:room?[room]:[],rowCount:room?1:0};
+   }
+   if(sql.startsWith('UPDATE rooms SET host_secret_hash')){
+    const room=[...rooms.values()].find(r=>r.id===values[1]);room.host_secret_hash=values[0];return {rows:[],rowCount:1};
    }
    if(sql.startsWith('INSERT INTO host_sessions')){
     const id='session-'+sessions.size;
-    sessions.set(id,{id,room_id:values[0],token_hash:values[1],expires_at:Date.now()+(sql.includes('30 days')?30*24:8)*60*60e3});
+    sessions.set(id,{id,room_id:values[0],token_hash:values[1],role:values[2],expires_at:Date.now()+24*60*60e3});
     return {rows:[{id,expires_at:new Date(sessions.get(id).expires_at)}],rowCount:1};
    }
+   if(sql.startsWith('INSERT INTO login_attempts')){
+    const rows=[];
+    for(const value of values[0]){
+     const hash=value.toString('hex'),entry=attempts.get(hash);
+     const attemptsForKey=entry&&entry.expires_at>Date.now()?entry.attempts+1:1;
+     attempts.set(hash,{attempts:attemptsForKey,expires_at:entry&&entry.expires_at>Date.now()?entry.expires_at:Date.now()+15*60e3});
+     rows.push({key_hash:value,attempts:attemptsForKey});
+    }
+    return {rows,rowCount:rows.length};
+   }
    if(sql.startsWith('INSERT INTO socket_tickets')){
-    tickets.set(values[1].toString('hex'),{session_id:values[0],expires_at:Date.now()+30000});
+    tickets.set(values[1].toString('hex'),{session_id:values[0],role:values[2],expires_at:Date.now()+30000});
     return {rows:[],rowCount:1};
    }
    if(sql.startsWith('WITH claimed AS')){
     const key=values[0].toString('hex'),ticket=tickets.get(key);
-    if(ticket)tickets.delete(key);
-    const session=ticket?.expires_at>Date.now()&&sessions.get(ticket.session_id);
+    if(ticket&&ticket.role===values[1])tickets.delete(key);
+    const session=ticket?.role===values[1]&&ticket.expires_at>Date.now()&&sessions.get(ticket.session_id);
+    const roleMatches=session?.role===values[1];
     const room=session&&[...rooms.values()].find(r=>r.id===session.room_id);
-    const active=session&&!session.revoked_at&&session.expires_at>Date.now();
+    const active=roleMatches&&session&&!session.revoked_at&&session.expires_at>Date.now();
     return {rows:room&&active?[{...room,session_id:session.id,session_expires_at:new Date(session.expires_at)}]:[],rowCount:room&&active?1:0};
    }
    if(sql.includes('FROM host_sessions s JOIN rooms')){
-    const session=[...sessions.values()].find(s=>(sql.includes('s.id=$1')?s.id===values[0]:s.token_hash.equals(values[0]))&&!s.revoked_at&&s.expires_at>Date.now());
+    const session=[...sessions.values()].find(s=>(sql.includes('s.id=$1')?s.id===values[0]:s.token_hash.equals(values[0]))&&(values[1]==null||s.role===values[1])&&!s.revoked_at&&s.expires_at>Date.now());
     const room=session&&[...rooms.values()].find(r=>r.id===session.room_id);
     return {rows:room?[{...room,session_id:session.id,session_expires_at:new Date(session.expires_at)}]:[],rowCount:room?1:0};
    }
    if(sql.startsWith('UPDATE host_sessions SET revoked_at')){
-    sessions.get(values[0]).revoked_at=Date.now();return {rows:[],rowCount:1};
+    if(sql.includes('WHERE id IN'))return {rows:[],rowCount:0};
+    for(const session of sessions.values())if(session.id===values[0]||session.room_id===values[0])session.revoked_at=Date.now();
+    return {rows:[],rowCount:1};
+   }
+   if(sql.startsWith('DELETE FROM socket_tickets WHERE session_id IN')){
+    for(const [hash,ticket] of tickets)if([...sessions.values()].some(session=>session.id===ticket.session_id&&session.room_id===values[0]))tickets.delete(hash);
+    return {rows:[],rowCount:1};
    }
    if(sql.startsWith('DELETE FROM socket_tickets WHERE session_id')){
     for(const [hash,ticket] of tickets)if(ticket.session_id===values[0])tickets.delete(hash);
     return {rows:[],rowCount:1};
    }
-   if(sql.startsWith('SELECT 1 FROM display_tokens'))return {rows:[{}],rowCount:1};
    return {rows:[],rowCount:0};
   },
   release(){}
@@ -67,6 +86,7 @@ function application({production=false,trustProxyHops=0}={}){
  return {
   sessions,
   tickets,
+  attempts,
   async request(method,url,body,headers={}){
    const request=new EventEmitter();Object.assign(request,{method,url,headers:{origin:'http://localhost:8080',...headers},socket:{remoteAddress:'test-client'}});
    const response={statusCode:200,headers:{},setHeader(name,value){this.headers[name.toLowerCase()]=value},writeHead(status){this.statusCode=status},end(body){this.body=JSON.parse(body)}};
@@ -74,6 +94,15 @@ function application({production=false,trustProxyHops=0}={}){
    return response;
   },
   create(body){return this.request('POST','/api/rooms',body)},
+  async signIn(roomName,secret,role='host'){
+   return this.request('POST','/api/session?role='+role,{roomName,secret});
+  },
+  rotatePassword(roomName,currentPassword,newPassword,cookie){
+   return this.request('POST','/api/session/password',{roomName,currentPassword,newPassword},{cookie,origin:'http://localhost:8080'});
+  },
+  revokeAll(cookie){
+   return this.request('DELETE','/api/session/all',{}, {cookie,origin:'http://localhost:8080'});
+  },
   clientIp(headers={},remoteAddress='test-client'){return context.ip({headers,socket:{remoteAddress}})},
   async authenticate(message,cookie){
    const messages=[],socket={clientIp:'test-client',send(data){messages.push(JSON.parse(data))},close(code){this.closed=code}};
@@ -90,7 +119,8 @@ test('room creation accepts a name and password and returning hosts use that nam
  const created=await app.create({roomName:'  Family Quiz  ',hostSecret});
  assert.equal(created.statusCode,201);
  assert.match(created.body.roomId,/^[a-f0-9-]{36}$/);
- const auth=await app.authenticate({role:'host',roomName:' FAMILY QUIZ ',secret:hostSecret});
+ const login=await app.signIn(' FAMILY QUIZ ',hostSecret,'host');
+ const auth=await app.authenticate({role:'host',socketTicket:login.body.socketTicket});
  assert.equal(auth.socket.authed,true);
  assert.equal(auth.message.roomId,created.body.roomId);
  assert.equal(auth.message.state.title,'Family Quiz');
@@ -98,20 +128,26 @@ test('room creation accepts a name and password and returning hosts use that nam
  assert.equal(duplicate.statusCode,409);
 });
 
-test('generated room IDs and display tokens cannot authenticate a host',async()=>{
+test('generated room IDs and arbitrary tokens cannot authenticate a host',async()=>{
  const app=application(),hostSecret='a long host password';
  const created=await app.create({roomName:'Family Quiz',hostSecret});
- await assert.rejects(app.authenticate({role:'host',roomId:created.body.roomId,secret:hostSecret}),/auth/);
- await assert.rejects(app.authenticate({role:'host',roomName:created.body.roomId,secret:hostSecret}),/denied/);
- await assert.rejects(app.authenticate({role:'host',roomName:'Family Quiz',secret:created.body.displayToken}),/denied/);
- const display=await app.authenticate({role:'display',roomId:created.body.roomId,secret:created.body.displayToken});
- assert.equal(display.socket.role,'display');
- await assert.rejects(app.authenticate({role:'host'},'scorescan_session='+display.message.sessionToken),/session_expired/);
+ assert.ok(!('displayToken' in created.body));
+ await assert.rejects(app.authenticate({role:'host',roomId:created.body.roomId,secret:hostSecret}),/session_expired/);
+ await assert.rejects(app.authenticate({role:'host',socketTicket:'a'.repeat(43)}),/session_expired/);
+ assert.equal((await app.signIn('Family Quiz','a'.repeat(15),'host')).statusCode,400);
+ assert.equal((await app.signIn('Family Quiz','violet orchard rain 47!','host')).statusCode,401);
 });
 
 test('empty names and invalid passwords cannot create a room',async()=>{
  const app=application();
- for(const body of [{roomName:' ',hostSecret:'a long host password'},{roomName:'Quiz',hostSecret:'short'},{roomName:'Q'.repeat(81),hostSecret:'a long host password'}]){
+ for(const body of [
+  {roomName:' ',hostSecret:'a long host password'},
+  {roomName:'Quiz',hostSecret:'short-password'},
+  {roomName:'Quiz',hostSecret:'passwordpassword'},
+  {roomName:'Quiz',hostSecret:'1234567890123456'},
+  {roomName:'Family Quiz',hostSecret:'My Family Quiz password!'},
+  {roomName:'Q'.repeat(81),hostSecret:'a long host password'}
+ ]){
   assert.equal((await app.create(body)).statusCode,400);
  }
 });
@@ -119,11 +155,13 @@ test('empty names and invalid passwords cannot create a room',async()=>{
 test('display signs in with room name/password but cannot mutate room data',async()=>{
  const app=application(),hostSecret='a long host password';
  await app.create({roomName:'Family Quiz',hostSecret});
- const display=await app.authenticate({role:'display',roomName:' FAMILY QUIZ ',secret:hostSecret});
+ const displayLogin=await app.signIn(' FAMILY QUIZ ',hostSecret,'display');
+ const display=await app.authenticate({role:'display',socketTicket:displayLogin.body.socketTicket});
  assert.equal(display.socket.role,'display');
  assert.equal(display.message.state.title,'Family Quiz');
  assert.ok(!('quizzes' in display.message.state));
- const host=await app.authenticate({role:'host',roomName:'FAMILY QUIZ',secret:hostSecret});
+ const hostLogin=await app.signIn('FAMILY QUIZ',hostSecret,'host');
+ const host=await app.authenticate({role:'host',socketTicket:hostLogin.body.socketTicket});
  assert.deepEqual(host.message.state.quizzes,[]);
  await assert.rejects(app.act(display.socket,{type:'player.add',name:'Intruder'}),/forbidden/);
 });
@@ -131,46 +169,55 @@ test('display signs in with room name/password but cannot mutate room data',asyn
 test('persistent cookie restores both screens and logout revokes future access',async()=>{
  const app=application({production:true}),hostSecret='a long host password';
  await app.create({roomName:'Family Quiz',hostSecret});
- const login=await app.request('POST','/api/session',{roomName:'family quiz',secret:hostSecret});
+ const login=await app.signIn('family quiz',hostSecret,'host');
  assert.equal(login.statusCode,200);
  const cookie=login.headers['set-cookie'];
- assert.match(cookie,/HttpOnly; SameSite=Strict; Max-Age=2592000/);
+ assert.match(cookie,/HttpOnly; SameSite=Strict; Max-Age=86400/);
  assert.match(cookie,/; Secure$/);
  assert.ok(!JSON.stringify(login.body).includes(hostSecret));
  assert.ok(!cookie.includes(hostSecret));
- const restored=await app.request('GET','/api/session',{}, {cookie});
+ const restored=await app.request('GET','/api/session?role=host',{}, {cookie});
  assert.equal(restored.body.roomName,'Family Quiz');
+ const displayLogin=await app.signIn('family quiz',hostSecret,'display'),displayCookie=displayLogin.headers['set-cookie'];
+ assert.equal((await app.request('GET','/api/session?role=host',{}, {cookie:displayCookie})).statusCode,401);
+ assert.equal((await app.request('POST','/api/images',Buffer.from('bad'),{cookie:displayCookie,origin:'http://localhost:8080','content-type':'image/png'})).statusCode,401);
  const sockets=[];
- for(const role of ['host','display']){
-  const auth=await app.authenticate({role},cookie);
+ for(const [role,sessionCookie] of [['host',cookie],['display',displayCookie]]){
+  const ticketed=await app.request('GET','/api/session?role='+role,{}, {cookie:sessionCookie});
+  const auth=await app.authenticate({role,socketTicket:ticketed.body.socketTicket});
   sockets.push(auth.socket);
   assert.equal(auth.socket.authed,true);assert.equal(auth.socket.role,role);
   assert.ok(!('sessionToken' in auth.message));
  }
  const logout=await app.request('DELETE','/api/session',{}, {cookie});
  assert.equal(logout.statusCode,200);assert.match(logout.headers['set-cookie'],/Max-Age=0/);
- assert.ok(sockets.every(socket=>socket.closed===4401));
- assert.equal((await app.request('GET','/api/session',{}, {cookie})).statusCode,401);
- await assert.rejects(app.authenticate({role:'host'},cookie),/session_expired/);
+ assert.equal(sockets[0].closed,4401);
+ assert.equal(sockets[1].closed,undefined);
+ assert.equal((await app.request('GET','/api/session?role=host',{}, {cookie})).statusCode,401);
+ await assert.rejects(app.authenticate({role:'host'}),/session_expired/);
+ await app.request('DELETE','/api/session',{}, {cookie:displayCookie});
+ assert.equal(sockets[1].closed,4401);
 });
 
 test('one-time opaque tickets authenticate sockets without a forwarded cookie',async()=>{
  const app=application({production:true}),hostSecret='a long host password';
  await app.create({roomName:'Family Quiz',hostSecret});
- const login=await app.request('POST','/api/session',{roomName:'Family Quiz',secret:hostSecret});
+ const login=await app.signIn('Family Quiz',hostSecret,'host');
  assert.match(login.body.socketTicket,/^[A-Za-z0-9_-]{43}$/);
- const restored=await app.request('GET','/api/session',{}, {cookie:login.headers['set-cookie']});
  const host=await app.authenticate({role:'host',socketTicket:login.body.socketTicket},'');
  assert.equal(host.socket.authed,true);
  await assert.rejects(app.authenticate({role:'host',socketTicket:login.body.socketTicket},''),/session_expired/);
+ const displayLogin=await app.signIn('Family Quiz',hostSecret,'display');
+ const restored=await app.request('GET','/api/session?role=display',{}, {cookie:displayLogin.headers['set-cookie']});
  const display=await app.authenticate({role:'display',socketTicket:restored.body.socketTicket},'');
  assert.equal(display.socket.authed,true);
+ await assert.rejects(app.authenticate({role:'host',socketTicket:restored.body.socketTicket},''),/session_expired/);
  const tampered=login.body.socketTicket.slice(0,-1)+(login.body.socketTicket.endsWith('a')?'b':'a');
  await assert.rejects(app.authenticate({role:'host',socketTicket:tampered},''),/session_expired/);
- const expired=await app.request('GET','/api/session',{}, {cookie:login.headers['set-cookie']});
+ const expired=await app.request('GET','/api/session?role=host',{}, {cookie:login.headers['set-cookie']});
  for(const ticket of app.tickets.values())ticket.expires_at=Date.now()-1;
  await assert.rejects(app.authenticate({role:'host',socketTicket:expired.body.socketTicket},''),/session_expired/);
- const beforeLogout=await app.request('GET','/api/session',{}, {cookie:login.headers['set-cookie']});
+ const beforeLogout=await app.request('GET','/api/session?role=host',{}, {cookie:login.headers['set-cookie']});
  await app.request('DELETE','/api/session',{}, {cookie:login.headers['set-cookie']});
  await assert.rejects(app.authenticate({role:'host',socketTicket:beforeLogout.body.socketTicket},''),/session_expired/);
 });
@@ -178,25 +225,56 @@ test('one-time opaque tickets authenticate sockets without a forwarded cookie',a
 test('missing, forged and expired sessions cannot restore access',async()=>{
  const app=application(),hostSecret='a long host password';
  await app.create({roomName:'Family Quiz',hostSecret});
- const login=await app.request('POST','/api/session',{roomName:'Family Quiz',secret:hostSecret}),cookie=login.headers['set-cookie'];
+ const login=await app.signIn('Family Quiz',hostSecret,'host'),cookie=login.headers['set-cookie'];
  for(const invalid of ['',`scorescan_session=${'a'.repeat(43)}`]){
-  assert.equal((await app.request('GET','/api/session',{}, {cookie:invalid})).statusCode,401);
-  await assert.rejects(app.authenticate({role:'host'},invalid),/session_expired/);
+  assert.equal((await app.request('GET','/api/session?role=host',{}, {cookie:invalid})).statusCode,401);
+  await assert.rejects(app.authenticate({role:'host'}),/session_expired/);
  }
  for(const session of app.sessions.values())session.expires_at=Date.now()-1;
- assert.equal((await app.request('GET','/api/session',{}, {cookie})).statusCode,401);
- await assert.rejects(app.authenticate({role:'display'},cookie),/session_expired/);
+ assert.equal((await app.request('GET','/api/session?role=display',{}, {cookie})).statusCode,401);
+ await assert.rejects(app.authenticate({role:'display'}),/session_expired/);
 });
 
 test('session login rejects wrong passwords and cross-origin login or logout',async()=>{
  const app=application();
  await app.create({roomName:'Family Quiz',hostSecret:'a long host password'});
- const body={roomName:'Family Quiz',secret:'wrong password'};
- assert.equal((await app.request('POST','/api/session',body)).statusCode,401);
+ const body={roomName:'Family Quiz',secret:'wrong password xx'};
+ assert.equal((await app.request('POST','/api/session?role=host',body)).statusCode,401);
  for(const method of ['POST','DELETE']){
-  assert.equal((await app.request(method,'/api/session',body,{origin:'https://evil.example'})).statusCode,403);
+  assert.equal((await app.request(method,'/api/session?role=host',body,{origin:'https://evil.example'})).statusCode,403);
  }
  assert.equal(app.sessions.size,0);
+});
+
+test('database login limits throttle brute force attempts independently of socket limits',async()=>{
+ const app=application(),hostSecret='a long host password';
+ await app.create({roomName:'Family Quiz',hostSecret});
+ for(let i=0;i<8;i++)assert.equal((await app.signIn('Family Quiz','incorrect password','host')).statusCode,401);
+ assert.equal((await app.signIn('Family Quiz','incorrect password','host')).statusCode,429);
+ assert.ok([...app.attempts.values()].some(entry=>entry.attempts>=8));
+});
+
+test('password rotation revokes every room session and issues a fresh host session',async()=>{
+ const app=application(),oldPassword='a long host password',newPassword='violet orchard rain 47!';
+ await app.create({roomName:'Family Quiz',hostSecret:oldPassword});
+ const host=await app.signIn('Family Quiz',oldPassword,'host'),display=await app.signIn('Family Quiz',oldPassword,'display');
+ const changed=await app.rotatePassword('Family Quiz',oldPassword,newPassword,host.headers['set-cookie']);
+ assert.equal(changed.statusCode,200);
+ assert.match(changed.headers['set-cookie'],/scorescan_session=/);
+ assert.equal((await app.request('GET','/api/session?role=host',{}, {cookie:host.headers['set-cookie']})).statusCode,401);
+ assert.equal((await app.request('GET','/api/session?role=display',{}, {cookie:display.headers['set-cookie']})).statusCode,401);
+ assert.equal((await app.signIn('Family Quiz',oldPassword,'host')).statusCode,401);
+ assert.equal((await app.signIn('Family Quiz',newPassword,'host')).statusCode,200);
+});
+
+test('all-sessions logout revokes host and display sessions for the room',async()=>{
+ const app=application(),hostSecret='a long host password';
+ await app.create({roomName:'Family Quiz',hostSecret});
+ const host=await app.signIn('Family Quiz',hostSecret,'host'),display=await app.signIn('Family Quiz',hostSecret,'display');
+ const revoked=await app.revokeAll(host.headers['set-cookie']);
+ assert.equal(revoked.statusCode,200);
+ assert.equal((await app.request('GET','/api/session?role=host',{}, {cookie:host.headers['set-cookie']})).statusCode,401);
+ assert.equal((await app.request('GET','/api/session?role=display',{}, {cookie:display.headers['set-cookie']})).statusCode,401);
 });
 
 test('only the configured trusted proxy hops determine the client address',()=>{

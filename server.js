@@ -1,10 +1,11 @@
 'use strict';
-const http=require('http'),fs=require('fs'),path=require('path'),crypto=require('crypto'),{Pool}=require('pg'),{WebSocketServer}=require('ws');
+const http=require('http'),fs=require('fs'),path=require('path'),crypto=require('crypto'),{URL}=require('url'),{Pool}=require('pg'),{WebSocketServer}=require('ws');
 function secret(fileEnv,valueEnv){const file=process.env[fileEnv];if(file)return fs.readFileSync(file,'utf8').trim();return process.env[valueEnv]}
 const DATABASE_URL=secret('DATABASE_URL_FILE','DATABASE_URL'),PEPPER=secret('SECRET_PEPPER_FILE','SECRET_PEPPER'),QR_SECRET=secret('QR_ENCRYPTION_KEY_FILE','QR_ENCRYPTION_KEY');
 const PORT=+(process.env.PORT||8080),PUBLIC=path.join(__dirname,'public'),ORIGINS=(process.env.ALLOWED_ORIGINS||'http://localhost:8080').split(',').map(s=>s.trim()).filter(Boolean),QR_KEY=Buffer.from(QR_SECRET||'','base64'),TRUST_PROXY_HOPS=proxyHops();if(!DATABASE_URL||!PEPPER||QR_KEY.length!==32)throw new Error('Database URL, secret pepper and 32-byte QR encryption key are required');
+const SESSION_TTL_SECONDS=24*60*60,LOGIN_CLIENT_LIMIT=8,LOGIN_ROOM_LIMIT=30;
 const db=new Pool({connectionString:DATABASE_URL,max:+process.env.DB_POOL_MAX||10,idleTimeoutMillis:30000,connectionTimeoutMillis:5000,ssl:process.env.DB_SSL==='1'?{rejectUnauthorized:true,ca:process.env.DB_CA}:false,application_name:'scorescan-v1'});db.on('error',e=>log('critical','db_pool_error',{message:e.message}));
-const ipBuckets=new Map(),authBuckets=new Map(),connections=new Map(),roomBuckets=new Map(),imageBuckets=new Map(),quizBuckets=new Map(),hashQueue=[];let hashActive=false;
+const ipBuckets=new Map(),authBuckets=new Map(),connections=new Map(),imageBuckets=new Map(),quizBuckets=new Map(),hashQueue=[];let hashActive=false;
 const b64=n=>crypto.randomBytes(n).toString('base64url'),safeEq=(a,b)=>a.length===b.length&&crypto.timingSafeEqual(a,b);function hmac(x){return crypto.createHmac('sha256',PEPPER).update(x).digest()}
 function proxyHops(){const raw=process.env.TRUST_PROXY_HOPS??(process.env.TRUST_PROXY==='1'?'1':'0'),value=Number(raw);return Number.isInteger(value)&&value>=0&&value<=8?value:0}
 function drainHashes(){
@@ -12,12 +13,38 @@ function drainHashes(){
  crypto.scrypt(job.secret+PEPPER,job.salt,64,{N:131072,r:8,p:1,maxmem:256*1024*1024},(error,key)=>{hashActive=false;if(error)job.reject(error);else job.resolve(key.toString('base64'));drainHashes()});
 }
 function scrypt(secret,salt){return new Promise((resolve,reject)=>{if(hashQueue.length>=8){const error=Error('hash queue full');error.code='RESOURCE_BUSY';reject(error);return}hashQueue.push({secret,salt,resolve,reject});drainHashes()})}
-async function passHash(secret){const salt=b64(16);return `scrypt$${salt}$${await scrypt(secret,salt)}`}
+async function passHash(secret,roomName){if(!strongPassword(secret,roomName))throw Object.assign(Error('weak_password'),{status:400});const salt=b64(16);return `scrypt$${salt}$${await scrypt(secret,salt)}`}
 async function passOk(secret,hash){try{const[,salt,expected]=hash.split('$');return safeEq(Buffer.from(await scrypt(secret,salt)),Buffer.from(expected))}catch(error){if(error.code==='RESOURCE_BUSY')throw error;return false}}
-function encQr(s){const iv=crypto.randomBytes(12),c=crypto.createCipheriv('aes-256-gcm',QR_KEY,iv),ct=Buffer.concat([c.update(s,'utf8'),c.final()]);return Buffer.concat([iv,c.getAuthTag(),ct])}function validId(x){return typeof x==='string'&&/^[a-z0-9][a-z0-9_-]{2,39}$/.test(x)}function txt(x,n=80){return typeof x==='string'&&x.trim().length&&x.trim().length<=n?x.trim():null}function integer(x,a,b){return Number.isSafeInteger(x)&&x>=a&&x<=b?x:null}
+const DUMMY_PASSWORD_HASH=`scrypt$${'A'.repeat(22)}$${Buffer.alloc(64).toString('base64')}`;
+function strongPassword(value,roomName=''){
+ if(typeof value!=='string'||value.length<16||value.length>128)return false;
+ const normalized=value.toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g,'');
+ const common=['password','passwordpassword','1234567890','1234567890123456','qwertyqwerty','qwertyuiopqwerty','letmeinletmein','welcomewelcome','changemechangeme','scorescanscorescan','adminadminadmin','iloveyouiloveyou','footballfootball','monkeymonkeymonkey'];
+ if(common.some(value=>normalized===value)||/(.)\1{5,}/u.test(value)||/(0123456789|9876543210|abcdefghijklmnopqrstuvwxyz|qwertyuiopasdfghjkl)/.test(normalized))return false;
+ if(roomName&&normalized.includes(roomName.toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g,'')))return false;
+ const groups=[/[a-z]/,/[A-Z]/,/[0-9]/,/[^A-Za-z0-9]/].filter(pattern=>pattern.test(value)).length;
+ return new Set(value).size>=8&&groups>=2;
+}
+function encQr(s){const iv=crypto.randomBytes(12),c=crypto.createCipheriv('aes-256-gcm',QR_KEY,iv),ct=Buffer.concat([c.update(s,'utf8'),c.final()]);return Buffer.concat([iv,c.getAuthTag(),ct])}function txt(x,n=80){return typeof x==='string'&&x.trim().length&&x.trim().length<=n?x.trim():null}function integer(x,a,b){return Number.isSafeInteger(x)&&x>=a&&x<=b?x:null}
 function ip(req){const forwarded=String(req.headers['x-forwarded-for']||'').split(',').map(value=>value.trim()).filter(Boolean);return TRUST_PROXY_HOPS&&forwarded.length>=TRUST_PROXY_HOPS?forwarded[forwarded.length-TRUST_PROXY_HOPS]:(req.socket.remoteAddress||'unknown')}
 function limited(map,key,max,ms){const now=Date.now(),a=(map.get(key)||[]).filter(t=>now-t<ms);a.push(now);map.set(key,a);if(map.size>10000)for(const[name,times]of map)if(!times.some(t=>now-t<ms))map.delete(name);return a.length>max}function log(level,event,meta={}){process.stdout.write(JSON.stringify({ts:new Date().toISOString(),level,event,...meta})+'\n')}
-function sec(res,type='application/json; charset=utf-8'){for(const[k,v]of Object.entries({'Content-Type':type,'Content-Security-Policy':"default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; connect-src 'self' wss:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'",'X-Frame-Options':'DENY','X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer','Permissions-Policy':'camera=(self), microphone=(), geolocation=(), payment=(), usb=()','Cross-Origin-Opener-Policy':'same-origin','Cross-Origin-Resource-Policy':'same-origin','Cache-Control':'no-store'}))res.setHeader(k,v);if(process.env.NODE_ENV==='production')res.setHeader('Strict-Transport-Security','max-age=63072000; includeSubDomains; preload')}
+function sec(res,type='application/json; charset=utf-8'){
+ const headers={
+  'Content-Type':type,
+  'Content-Security-Policy':"default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; connect-src 'self' wss:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'",
+  'X-Frame-Options':'DENY',
+  'X-Content-Type-Options':'nosniff',
+  'X-Permitted-Cross-Domain-Policies':'none',
+  'Origin-Agent-Cluster':'?1',
+  'Referrer-Policy':'no-referrer',
+  'Permissions-Policy':'camera=(self), microphone=(), geolocation=(), payment=(), usb=(), browsing-topics=()',
+  'Cross-Origin-Opener-Policy':'same-origin',
+  'Cross-Origin-Resource-Policy':'same-origin',
+  'Cache-Control':'no-store'
+ };
+ for(const[k,v]of Object.entries(headers))res.setHeader(k,v);
+ if(process.env.NODE_ENV==='production')res.setHeader('Strict-Transport-Security','max-age=63072000; includeSubDomains; preload');
+}
 function read(req,max=4096){return new Promise((ok,no)=>{let s='',n=0;req.on('data',c=>{n+=c.length;if(n>max){no(Error('large'));req.destroy()}else s+=c});req.on('end',()=>{try{ok(JSON.parse(s||'{}'))}catch{no(Error('json'))}});req.on('error',no)})}
 
 const IMAGE_TYPES=new Set(['image/jpeg','image/png','image/webp']),MAX_IMAGE_BYTES=5*1024*1024;
@@ -32,7 +59,7 @@ async function imageUpload(req,res,reqId){
  if(limited(imageBuckets,ip(req),30,15*60e3)){res.writeHead(429);res.end('{"error":"rate_limited"}');return}
  const c=await db.connect();
  try{
-  const room=await savedSession(c,req);
+  const room=await savedSession(c,req,'host');
   if(!room){res.writeHead(401);res.end('{"error":"session_expired"}');return}
   const data=await readBuffer(req,MAX_IMAGE_BYTES);
   if(!data.length||imageMime(data)!==type){res.writeHead(415);res.end('{"error":"unsupported_image"}');return}
@@ -53,7 +80,7 @@ async function imageThumb(req,res,id,reqId){
  if(limited(imageBuckets,ip(req),60,15*60e3)){res.writeHead(429);res.end('{"error":"rate_limited"}');return}
  const c=await db.connect();
  try{
-  const room=await savedSession(c,req);
+  const room=await savedSession(c,req,'host');
   if(!room){res.writeHead(401);res.end('{"error":"session_expired"}');return}
   const data=await readBuffer(req,512*1024);
   if(!data.length||imageMime(data)!==type){res.writeHead(415);res.end('{"error":"unsupported_image"}');return}
@@ -86,7 +113,7 @@ async function quizSave(req,res,reqId){
  if(!ORIGINS.includes(req.headers.origin)){res.writeHead(403);res.end('{"error":"origin_denied"}');return}
  const c=await db.connect();let started=false;
  try{
-  const room=await savedSession(c,req);
+  const room=await savedSession(c,req,'host');
   if(!room){res.writeHead(401);res.end('{"error":"session_expired"}');return}
   if(limited(quizBuckets,ip(req),30,15*60e3)){res.writeHead(429);res.end('{"error":"rate_limited"}');return}
   const body=await read(req,262144),title=txt(body.title,120),input=Array.isArray(body.questions)?body.questions:[];
@@ -131,7 +158,7 @@ async function quizDelete(req,res,reqId){
  if(!id){res.writeHead(404);res.end();return}
  const c=await db.connect();let started=false;
  try{
-  const room=await savedSession(c,req);
+  const room=await savedSession(c,req,'host');
   if(!room){res.writeHead(401);res.end('{"error":"session_expired"}');return}
   await c.query('BEGIN');started=true;
   if(!(await c.query('DELETE FROM quizzes WHERE room_id=$1 AND id=$2 RETURNING id',[room.id,id])).rowCount)throw Error('quiz');
@@ -180,49 +207,68 @@ async function state(c,slug,gameId,includeQuizzes=false){
 function sessionCookie(req,token,maxAge){
  return `scorescan_session=${token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${maxAge}${process.env.NODE_ENV==='production'||req.socket.encrypted?'; Secure':''}`;
 }
-async function savedSession(c,req){
+async function savedSession(c,req,requiredRole){
  const token=/(?:^|;\s*)scorescan_session=([A-Za-z0-9_-]{43})(?:;|$)/.exec(req.headers.cookie||'')?.[1];
  if(!token)return null;
  return (await c.query(`SELECT r.*,s.id AS session_id,s.expires_at AS session_expires_at
   FROM host_sessions s JOIN rooms r ON r.id=s.room_id
-  WHERE s.token_hash=$1 AND s.revoked_at IS NULL AND s.expires_at>now()`,[hmac('browser-session:'+token)])).rows[0]||null;
+  WHERE s.token_hash=$1 AND ($2::text IS NULL OR s.socket_role=$2)
+   AND s.revoked_at IS NULL AND s.expires_at>now()`,[hmac('browser-session:'+token),requiredRole||null])).rows[0]||null;
 }
-async function ticketSession(c,ticket){
+async function ticketSession(c,ticket,role){
  if(typeof ticket!=='string'||!/^[A-Za-z0-9_-]{43}$/.test(ticket))return null;
  return (await c.query(`WITH claimed AS(
    DELETE FROM socket_tickets
-   WHERE token_hash=$1 AND expires_at>now()
+   WHERE token_hash=$1 AND socket_role=$2 AND expires_at>now()
    RETURNING session_id)
   SELECT r.*,s.id AS session_id,s.expires_at AS session_expires_at
   FROM claimed t JOIN host_sessions s ON s.id=t.session_id
   JOIN rooms r ON r.id=s.room_id
-  WHERE s.revoked_at IS NULL AND s.expires_at>now()`,[hmac('socket-ticket:'+ticket)])).rows[0]||null;
+  WHERE s.socket_role=$2 AND s.revoked_at IS NULL AND s.expires_at>now()`,[hmac('socket-ticket:'+ticket),role])).rows[0]||null;
+}
+async function loginLimited(c,keyHashes){
+ const rows=(await c.query(`INSERT INTO login_attempts(key_hash,attempts,expires_at)
+  SELECT candidate,1,now()+interval '15 minutes' FROM unnest($1::bytea[]) AS hashes(candidate)
+  ON CONFLICT(key_hash) DO UPDATE SET attempts=CASE WHEN login_attempts.expires_at<=now() THEN 1 ELSE login_attempts.attempts+1 END,
+   expires_at=CASE WHEN login_attempts.expires_at<=now() THEN now()+interval '15 minutes' ELSE login_attempts.expires_at END
+  RETURNING key_hash,attempts`,[keyHashes])).rows;
+ return rows.some(row=>(row.key_hash.equals(keyHashes[0])?LOGIN_CLIENT_LIMIT:LOGIN_ROOM_LIMIT)<row.attempts);
 }
 async function sessionRequest(req,res){
  sec(res);
  if(!['GET','POST','DELETE'].includes(req.method)){res.writeHead(405);res.end('{"error":"method_not_allowed"}');return}
  if(req.method!=='GET'&&!ORIGINS.includes(req.headers.origin)){res.writeHead(403);res.end('{"error":"origin_denied"}');return}
- let body,name;
+ const role=new URL(req.url,'http://localhost').searchParams.get('role');
+ if(req.method!=='DELETE'&&!['host','display'].includes(role)){res.writeHead(400);res.end('{"error":"invalid_role"}');return}
+ let body,name,loginKeys;
  if(req.method==='POST'){
   body=await read(req);name=txt(body.roomName);
-  if(!name||typeof body.secret!=='string'||body.secret.length>128){res.writeHead(400);res.end('{"error":"invalid_input"}');return}
+  if(!name||!strongPassword(body.secret,name)){res.writeHead(400);res.end('{"error":"invalid_input"}');return}
   if(limited(authBuckets,ip(req)+':'+name.toLowerCase(),8,15*60e3)){res.writeHead(429);res.end('{"error":"rate_limited"}');return}
+  loginKeys=[hmac('login-client:'+ip(req)),hmac('login-room:'+name.toLowerCase())];
  }
  const c=await db.connect();
  try{
   let room;
   if(req.method==='POST'){
+   if(await loginLimited(c,loginKeys)){res.writeHead(429);res.end('{"error":"rate_limited"}');return}
    room=(await c.query('SELECT * FROM rooms WHERE login_name=lower($1)',[name])).rows[0];
-   if(!room||!await passOk(body.secret,room.host_secret_hash)){
+   const passwordMatches=await passOk(body.secret,room?.host_secret_hash||DUMMY_PASSWORD_HASH);
+   if(!room||!passwordMatches){
+    await audit(c,room?.id||null,null,'session_login','denied',crypto.randomUUID(),req);
     log('warning','session_login_rejected');res.writeHead(401);res.end('{"error":"denied"}');return;
    }
+   await c.query('DELETE FROM login_attempts WHERE key_hash=ANY($1::bytea[])',[loginKeys]);
    const token=b64(32);
-   const session=(await c.query(`INSERT INTO host_sessions(room_id,token_hash,expires_at)
-    VALUES($1,$2,now()+interval '30 days') RETURNING id,expires_at`,[room.id,hmac('browser-session:'+token)])).rows[0];
+   const session=(await c.query(`INSERT INTO host_sessions(room_id,token_hash,socket_role,expires_at)
+    VALUES($1,$2,$3,now()+($4 * interval '1 second')) RETURNING id,expires_at`,[room.id,hmac('browser-session:'+token),role,SESSION_TTL_SECONDS])).rows[0];
+   await c.query(`UPDATE host_sessions SET revoked_at=now() WHERE id IN(
+    SELECT id FROM host_sessions WHERE room_id=$1 AND revoked_at IS NULL AND expires_at>now()
+    ORDER BY created_at DESC OFFSET 12)`,[room.id]);
    room={...room,session_id:session.id,session_expires_at:session.expires_at};
-   res.setHeader('Set-Cookie',sessionCookie(req,token,30*24*60*60));
+   res.setHeader('Set-Cookie',sessionCookie(req,token,SESSION_TTL_SECONDS));
   }else{
-   room=await savedSession(c,req);
+   room=await savedSession(c,req,req.method==='DELETE'?undefined:role);
    if(req.method==='DELETE'){
     if(room){
      await c.query('UPDATE host_sessions SET revoked_at=now() WHERE id=$1',[room.session_id]);
@@ -234,41 +280,116 @@ async function sessionRequest(req,res){
    if(!room){res.writeHead(401);res.end('{"error":"session_expired"}');return}
   }
   const socketToken=b64(32);
-  await c.query("INSERT INTO socket_tickets(session_id,token_hash,expires_at) VALUES($1,$2,now()+interval '30 seconds')",[room.session_id,hmac('socket-ticket:'+socketToken)]);
+  await c.query("INSERT INTO socket_tickets(session_id,token_hash,socket_role,expires_at) VALUES($1,$2,$3,now()+interval '30 seconds')",[room.session_id,hmac('socket-ticket:'+socketToken),role]);
   res.end(JSON.stringify({roomName:room.title,socketTicket:socketToken}));
  }finally{c.release()}
 }
-const server=http.createServer(async(req,res)=>{const reqId=crypto.randomUUID();try{if(req.method==='GET'&&req.url.startsWith('/api/images/'))return await imageGet(req,res);const thumbRoute=/^\/api\/images\/([0-9a-f-]{36})\/thumbnail$/.exec(req.url);if(req.method==='POST'&&thumbRoute)return await imageThumb(req,res,thumbRoute[1],reqId);if(limited(ipBuckets,ip(req),120,60000)){sec(res);res.writeHead(429);return res.end('{"error":"rate_limited"}')}if(req.url==='/api/session')return await sessionRequest(req,res);if(req.method==='POST'&&req.url==='/api/images')return await imageUpload(req,res,reqId);if(req.method==='POST'&&req.url==='/api/quizzes')return await quizSave(req,res,reqId);if(req.method==='DELETE'&&req.url.startsWith('/api/quizzes/'))return await quizDelete(req,res,reqId);if(req.method==='POST'&&req.url==='/api/rooms'){if(!ORIGINS.includes(req.headers.origin)){sec(res);res.writeHead(403);return res.end('{"error":"origin_denied"}')}const b=await read(req),title=txt(b.roomName),secret=b.hostSecret;if(!title||typeof secret!=='string'||!((/^\d{8,16}$/.test(secret))||(secret.length>=12&&secret.length<=128))){sec(res);res.writeHead(400);return res.end('{"error":"invalid_input"}')}const client=ip(req);if(limited(roomBuckets,client,5,15*60e3)||limited(roomBuckets,'global',30,15*60e3)){sec(res);res.writeHead(429);return res.end('{"error":"rate_limited"}')}const slug=crypto.randomUUID(),token=b64(32),hostSecretHash=await passHash(secret),c=await db.connect();try{await c.query('BEGIN');const rr=(await c.query('INSERT INTO rooms(slug,title,login_name,host_secret_hash) VALUES($1,$2,lower($4),$3) RETURNING id',[slug,title,hostSecretHash,title])).rows[0];await c.query('INSERT INTO display_tokens(room_id,token_hash) VALUES($1,$2)',[rr.id,hmac(token)]);await audit(c,rr.id,null,'room_created','ok',reqId,req);await c.query('COMMIT');sec(res);res.writeHead(201);return res.end(JSON.stringify({roomId:slug,displayToken:token}))}catch(e){await c.query('ROLLBACK');throw e}finally{c.release()}}
+async function rotatePassword(req,res,reqId){
+ sec(res);
+ if(!ORIGINS.includes(req.headers.origin)){res.writeHead(403);res.end('{"error":"origin_denied"}');return}
+ const body=await read(req),name=txt(body.roomName),oldPassword=body.currentPassword,newPassword=body.newPassword;
+ if(!name||typeof oldPassword!=='string'||oldPassword.length<16||oldPassword.length>128||!strongPassword(newPassword,name)){
+  res.writeHead(400);res.end('{"error":"invalid_input"}');return;
+ }
+ const keys=[hmac('login-client:'+ip(req)),hmac('login-room:'+name.toLowerCase())];
+ const c=await db.connect();let started=false;
+ try{
+  const current=await savedSession(c,req,'host');
+  if(!current||current.login_name!==name.toLowerCase()){res.writeHead(401);res.end('{"error":"session_expired"}');return}
+  if(await loginLimited(c,keys)){res.writeHead(429);res.end('{"error":"rate_limited"}');return}
+  await c.query('BEGIN');started=true;
+  const room=(await c.query('SELECT * FROM rooms WHERE id=$1 FOR UPDATE',[current.id])).rows[0];
+  if(!room||!await passOk(oldPassword,room.host_secret_hash))throw Error('credentials');
+  const hash=await passHash(newPassword,name),token=b64(32);
+  await c.query('UPDATE rooms SET host_secret_hash=$1,updated_at=now() WHERE id=$2',[hash,room.id]);
+  await c.query('UPDATE host_sessions SET revoked_at=now() WHERE room_id=$1 AND revoked_at IS NULL',[room.id]);
+  await c.query('DELETE FROM socket_tickets WHERE session_id IN (SELECT id FROM host_sessions WHERE room_id=$1)',[room.id]);
+  const session=(await c.query(`INSERT INTO host_sessions(room_id,token_hash,socket_role,expires_at)
+   VALUES($1,$2,'host',now()+($3 * interval '1 second')) RETURNING id`,[room.id,hmac('browser-session:'+token),SESSION_TTL_SECONDS])).rows[0];
+  await audit(c,room.id,session.id,'password_rotated','ok',reqId,req);
+  await c.query('COMMIT');started=false;
+  res.setHeader('Set-Cookie',sessionCookie(req,token,SESSION_TTL_SECONDS));
+  for(const socket of wss.clients)if(socket.room?.id===room.id)socket.close(4401,'password_rotated');
+  res.end('{"ok":true}');
+ }catch(error){
+  if(started)await c.query('ROLLBACK').catch(()=>{});
+  if(error.message==='credentials'){
+   log('warning','password_rotation_rejected',{reqId});res.writeHead(401);res.end('{"error":"denied"}');return;
+  }
+  throw error;
+ }finally{c.release()}
+}
+async function revokeAllSessions(req,res,reqId){
+ sec(res);
+ if(!ORIGINS.includes(req.headers.origin)){res.writeHead(403);res.end('{"error":"origin_denied"}');return}
+ const c=await db.connect();
+ try{
+  const room=await savedSession(c,req,'host');
+  if(!room){res.writeHead(401);res.end('{"error":"session_expired"}');return}
+  await c.query('BEGIN');
+  await c.query('UPDATE host_sessions SET revoked_at=now() WHERE room_id=$1 AND revoked_at IS NULL',[room.id]);
+  await c.query('DELETE FROM socket_tickets WHERE session_id IN (SELECT id FROM host_sessions WHERE room_id=$1)',[room.id]);
+  await audit(c,room.id,room.session_id,'sessions_revoked','ok',reqId,req);
+  await c.query('COMMIT');
+  res.setHeader('Set-Cookie',sessionCookie(req,'',0));
+  for(const socket of wss.clients)if(socket.room?.id===room.id)socket.close(4401,'logout_all');
+  res.end('{"ok":true}');
+ }catch(error){await c.query('ROLLBACK').catch(()=>{});throw error}finally{c.release()}
+}
+async function createRoom(req,res,reqId){
+ sec(res);
+ if(!ORIGINS.includes(req.headers.origin)){res.writeHead(403);res.end('{"error":"origin_denied"}');return}
+ const body=await read(req),title=txt(body.roomName),secret=body.hostSecret;
+ if(!title||!strongPassword(secret,title)){res.writeHead(400);res.end('{"error":"invalid_input"}');return}
+ const keys=[hmac('room-create-client:'+ip(req)),hmac('room-create-global:all')],c=await db.connect();
+ let started=false;
+ try{
+  const attempts=(await c.query(`INSERT INTO login_attempts(key_hash,attempts,expires_at)
+   SELECT candidate,1,now()+interval '15 minutes' FROM unnest($1::bytea[]) AS hashes(candidate)
+   ON CONFLICT(key_hash) DO UPDATE SET attempts=CASE WHEN login_attempts.expires_at<=now() THEN 1 ELSE login_attempts.attempts+1 END,
+    expires_at=CASE WHEN login_attempts.expires_at<=now() THEN now()+interval '15 minutes' ELSE login_attempts.expires_at END
+   RETURNING key_hash,attempts`,[keys])).rows;
+  if(attempts.some(row=>(row.key_hash.equals(keys[0])?5:30)<row.attempts)){
+   log('warning','room_creation_rate_limited',{client:hmac('room-create-log:'+ip(req)).toString('hex').slice(0,16)});
+   res.writeHead(429);res.end('{"error":"rate_limited"}');return;
+  }
+  const slug=crypto.randomUUID(),hostSecretHash=await passHash(secret,title);
+  await c.query('BEGIN');started=true;
+  const room=(await c.query('INSERT INTO rooms(slug,title,login_name,host_secret_hash) VALUES($1,$2,lower($4),$3) RETURNING id',[slug,title,hostSecretHash,title])).rows[0];
+  await audit(c,room.id,null,'room_created','ok',reqId,req);
+  await c.query('COMMIT');started=false;
+  res.writeHead(201);res.end(JSON.stringify({roomId:slug}));
+ }catch(error){
+  if(started)await c.query('ROLLBACK').catch(()=>{});
+  throw error;
+ }finally{c.release()}
+}
+const server=http.createServer(async(req,res)=>{
+ const reqId=crypto.randomUUID();
+ try{
+  const route=new URL(req.url,'http://localhost').pathname;
+  if(req.method==='GET'&&route.startsWith('/api/images/'))return await imageGet(req,res);
+  const thumbRoute=/^\/api\/images\/([0-9a-f-]{36})\/thumbnail$/.exec(route);
+  if(req.method==='POST'&&thumbRoute)return await imageThumb(req,res,thumbRoute[1],reqId);
+  if(limited(ipBuckets,ip(req),120,60000)){sec(res);res.writeHead(429);return res.end('{"error":"rate_limited"}')}
+  if(req.method==='POST'&&route==='/api/session/password')return await rotatePassword(req,res,reqId);
+  if(req.method==='DELETE'&&route==='/api/session/all')return await revokeAllSessions(req,res,reqId);
+  if(route==='/api/session')return await sessionRequest(req,res);
+  if(req.method==='POST'&&route==='/api/images')return await imageUpload(req,res,reqId);
+  if(req.method==='POST'&&route==='/api/quizzes')return await quizSave(req,res,reqId);
+  if(req.method==='DELETE'&&route.startsWith('/api/quizzes/'))return await quizDelete(req,res,reqId);
+  if(req.method==='POST'&&route==='/api/rooms')return await createRoom(req,res,reqId);
 if(req.url==='/healthz'||req.url==='/readyz'){const c=await db.connect();try{await c.query('SELECT 1');sec(res);res.end('{"ok":true}')}finally{c.release()}return}let u=req.url.split('?')[0];if(u==='/')u='/index.html';if(u==='/vendor/html5-qrcode.min.js'){u='/vendor.js';const src=path.join(__dirname,'node_modules/html5-qrcode/html5-qrcode.min.js');sec(res,'text/javascript; charset=utf-8');return fs.createReadStream(src).pipe(res)}const f=path.normalize(path.join(PUBLIC,u));if(!f.startsWith(PUBLIC)){sec(res);res.writeHead(403);return res.end()}const types={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.webmanifest':'application/manifest+json; charset=utf-8','.png':'image/png','.svg':'image/svg+xml'};sec(res,types[path.extname(f)]||'application/octet-stream');fs.stat(f,(e,s)=>{if(e||!s.isFile()){res.writeHead(404);res.end()}else fs.createReadStream(f).pipe(res)})}catch(e){log('error','http_error',{reqId,message:e.code||e.message});if(!res.headersSent)sec(res);const status=e.code==='23505'?409:e.code==='RESOURCE_BUSY'?503:400;res.writeHead(status);res.end(status===503?'{"error":"temporarily_unavailable"}':'{"error":"request_failed"}')}});
 const wss=new WebSocketServer({noServer:true,maxPayload:16384,perMessageDeflate:false});server.on('upgrade',(req,sock,head)=>{const client=ip(req);if(!ORIGINS.includes(req.headers.origin)||limited(connections,client,8,60000)||new URL(req.url,'http://x').pathname!=='/ws'){sock.write('HTTP/1.1 403 Forbidden\r\n\r\n');return sock.destroy()}wss.handleUpgrade(req,sock,head,ws=>{ws.clientIp=client;wss.emit('connection',ws,req)})});
 async function auth(ws,m,req){
  if(m.type!=='auth'||!['host','display'].includes(m.role))throw Error('auth');
  const c=await db.connect();
  try{
-  let room,sid,raw;
-  if(m.socketTicket!==undefined){
-    room=await ticketSession(c,m.socketTicket);
-    if(!room)throw Error('session_expired');
-    sid=room.session_id;ws.sessionExpiresAt=new Date(room.session_expires_at).getTime();
-  }else if(m.secret===undefined){
-   room=await savedSession(c,req);
-    if(!room)throw Error('session_expired');
-   sid=room.session_id;ws.sessionExpiresAt=new Date(room.session_expires_at).getTime();
-  }else{
-   const name=txt(m.roomName),legacyDisplay=m.role==='display'&&!name&&validId(m.roomId);
-   if(typeof m.secret!=='string'||m.secret.length>128||(!name&&!legacyDisplay))throw Error('auth');
-   if(limited(authBuckets,ws.clientIp+':'+(name||m.roomId).toLowerCase(),8,15*60e3))throw Error('blocked');
-   room=(await c.query(legacyDisplay?'SELECT * FROM rooms WHERE slug=$1':'SELECT * FROM rooms WHERE login_name=lower($1)',[name||m.roomId])).rows[0];
-   const ok=room&&(legacyDisplay?
-    (await c.query('SELECT 1 FROM display_tokens WHERE room_id=$1 AND token_hash=$2 AND revoked_at IS NULL AND(expires_at IS NULL OR expires_at>now())',[room.id,hmac(m.secret)])).rowCount===1:
-    await passOk(m.secret,room.host_secret_hash));
-   if(!ok)throw Error('denied');
-   raw=b64(32);
-   sid=(await c.query("INSERT INTO host_sessions(room_id,token_hash,expires_at) VALUES($1,$2,now()+interval '8 hours') RETURNING id",[room.id,hmac(raw)])).rows[0].id;
-   ws.sessionExpiresAt=Date.now()+8*60*60e3;
-  }
+  const room=await ticketSession(c,m.socketTicket,m.role),sid=room?.session_id;
+  if(!room)throw Error('session_expired');
+  ws.sessionExpiresAt=new Date(room.session_expires_at).getTime();
   ws.room=room;ws.role=m.role;ws.session=sid;ws.req=req;ws.roomSlug=room.slug;ws.authed=true;
-  ws.send(JSON.stringify({type:'auth.ok',roomId:room.slug,...(raw?{sessionToken:raw}:{}),state:await state(c,room.slug,undefined,m.role==='host')}));
+  ws.send(JSON.stringify({type:'auth.ok',roomId:room.slug,state:await state(c,room.slug,undefined,m.role==='host')}));
  }finally{c.release()}
 }
 async function act(ws,m){
@@ -382,4 +503,4 @@ wss.on('connection',(ws,req)=>{
  });
  ws.on('error',e=>log('warning','ws_error',{reason:e.message}));
  ws.on('close',()=>clearTimeout(timer));
-});setInterval(async()=>{try{await db.query("DELETE FROM host_sessions WHERE expires_at<now() OR revoked_at IS NOT NULL AND revoked_at<now()-interval '7 days'");await db.query("DELETE FROM socket_tickets WHERE expires_at<now()");await db.query("DELETE FROM quiz_images i WHERE i.created_at<now()-interval '30 days' AND NOT EXISTS(SELECT 1 FROM quiz_questions q WHERE q.image_id=i.id) AND NOT EXISTS(SELECT 1 FROM game_questions g WHERE g.image_id=i.id)")}catch{}},3600000).unref();server.listen(PORT,()=>log('info','started',{port:PORT}));
+});setInterval(async()=>{try{await db.query("DELETE FROM host_sessions WHERE expires_at<now() OR revoked_at IS NOT NULL AND revoked_at<now()-interval '7 days'");await db.query("DELETE FROM socket_tickets WHERE expires_at<now()");await db.query("DELETE FROM login_attempts WHERE expires_at<now()");await db.query("DELETE FROM quiz_images i WHERE i.created_at<now()-interval '30 days' AND NOT EXISTS(SELECT 1 FROM quiz_questions q WHERE q.image_id=i.id) AND NOT EXISTS(SELECT 1 FROM game_questions g WHERE g.image_id=i.id)")}catch{}},3600000).unref();server.listen(PORT,()=>log('info','started',{port:PORT}));

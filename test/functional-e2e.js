@@ -6,12 +6,15 @@ const wait=ms=>new Promise(r=>setTimeout(r,ms));
 class Client{
  constructor(role,secret){this.role=role;this.secret=secret;this.queue=[];this.waiters=[]}
  async open(){
+  const login=await fetch(APP+'/api/session?role='+this.role,{method:'POST',headers:{origin:ORIGIN,'content-type':'application/json'},body:JSON.stringify({roomName:room,secret:this.secret})});
+  if(login.status!==200)throw Error('Login rejected');
+  const ticket=(await login.json()).socketTicket;
   const url=APP.replace(/^http/,'ws')+'/ws';
   this.ws=new WebSocket(url,{headers:{Origin:ORIGIN}});
   this.ws.on('message',b=>this.push(JSON.parse(b)));
   this.ws.on('close',()=>{for(const w of this.waiters){clearTimeout(w.t);w.no(Error('WebSocket closed'))}this.waiters=[]});
   await new Promise((ok,no)=>{this.ws.once('open',ok);this.ws.once('error',no)});
-  this.send({type:'auth',...(this.role==='host'?{roomName:` ${room.toUpperCase()} `}:{roomId}),role:this.role,secret:this.secret});
+  this.send({type:'auth',role:this.role,socketTicket:ticket});
   return this.next(x=>x.type==='auth.ok');
  }
  push(m){const i=this.waiters.findIndex(w=>w.pred(m));if(i>=0){const w=this.waiters.splice(i,1)[0];clearTimeout(w.t);w.ok(m)}else this.queue.push(m)}
@@ -29,10 +32,10 @@ function close(...clients){for(const c of clients)c?.close()}
  for(let i=0;i<40;i++){try{if((await fetch(APP+'/readyz')).ok)break}catch{}await wait(250)}
  let page=await fetch(APP+'/');assert.equal(page.status,200);assert.match(page.headers.get('content-security-policy')||'',/default-src/);assert.equal(page.headers.get('x-content-type-options'),'nosniff');
  assert.equal((await fetch(APP+'/scoreboard.html')).status,200);assert.equal((await fetch(APP+'/does-not-exist')).status,404);
- let r=await fetch(APP+'/api/rooms',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({roomName:'',hostSecret:'short'})});assert.equal(r.status,400);
+ let r=await fetch(APP+'/api/rooms',{method:'POST',headers:{origin:ORIGIN,'content-type':'application/json'},body:JSON.stringify({roomName:'',hostSecret:'short'})});assert.equal(r.status,400);
  await new Promise((ok,no)=>{const bad=new WebSocket(APP.replace(/^http/,'ws')+'/ws',{headers:{Origin:'https://evil.example'}});bad.once('unexpected-response',(_req,res)=>{assert.equal(res.statusCode,403);ok()});bad.once('open',()=>no(Error('Forbidden origin connected')));bad.once('error',e=>{if(!String(e.message).includes('403'))no(e)})});
- r=await fetch(APP+'/api/rooms',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({roomName:room,hostSecret})});assert.equal(r.status,201);const created=await r.json();assert.ok(created.displayToken);roomId=created.roomId;
- r=await fetch(APP+'/api/rooms',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({roomName:` ${room.toUpperCase()} `,hostSecret})});assert.equal(r.status,409);
+ r=await fetch(APP+'/api/rooms',{method:'POST',headers:{origin:ORIGIN,'content-type':'application/json'},body:JSON.stringify({roomName:room,hostSecret})});assert.equal(r.status,201);const created=await r.json();assert.ok(created.roomId&&!('displayToken' in created));roomId=created.roomId;
+ r=await fetch(APP+'/api/rooms',{method:'POST',headers:{origin:ORIGIN,'content-type':'application/json'},body:JSON.stringify({roomName:` ${room.toUpperCase()} `,hostSecret})});assert.equal(r.status,409);
  const idle=new WebSocket(APP.replace(/^http/,'ws')+'/ws',{headers:{Origin:ORIGIN}});await new Promise((ok,no)=>{idle.once('open',ok);idle.once('error',no)});
  await new Promise((ok,no)=>{const timer=setTimeout(()=>no(Error('Authentication timeout missing')),7000);idle.once('close',code=>{clearTimeout(timer);assert.equal(code,4401);ok()})});
  const host=new Client('host',hostSecret),auth=await host.open();assert.equal(auth.state.title,room);assert.equal(auth.state.games.length,0);
@@ -75,7 +78,7 @@ function close(...clients){for(const c of clients)c?.close()}
  st=await stateAfter(host,'player.add',{name:'Charlie New',playerType:'person',code:'qr-charlie'});assert.ok(player(st.state,'Charlie New'));assert.ok(player(st.state,'Charlie').deleted);
  st=await stateAfter(host,'game.select',{gameId:null});assert.equal(st.state.game.id,nextGame.state.activeGameId);assert.equal(score(st.state,'Alice'),0);
  await stateAfter(host,'game.stop',{gameId:nextGame.state.activeGameId,questionId:nextGame.state.game.questions[0].id});
- const login=await fetch(APP+'/api/session',{method:'POST',headers:{origin:ORIGIN,'content-type':'application/json'},body:JSON.stringify({roomName:room,secret:hostSecret})});
+ const login=await fetch(APP+'/api/session?role=host',{method:'POST',headers:{origin:ORIGIN,'content-type':'application/json'},body:JSON.stringify({roomName:room,secret:hostSecret})});
  assert.equal(login.status,200);const cookie=(login.headers.get('set-cookie')||'').split(';')[0];assert.match(cookie,/^scorescan_session=/);
  const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=','base64');
  r=await fetch(APP+'/api/images',{method:'POST',headers:{origin:ORIGIN,'content-type':'image/png'},body:png});assert.equal(r.status,401);
@@ -100,10 +103,10 @@ function close(...clients){for(const c of clients)c?.close()}
  assert.equal((await fetch(APP+'/api/images/'+image.id)).status,401);
  r=await fetch(APP+'/api/quizzes/'+quiz.quizId,{method:'DELETE',headers:{origin:ORIGIN,cookie}});assert.equal(r.status,200);
  const quizGone=await host.next(x=>x.type==='state'&&!(x.state.quizzes||[]).some(q=>q.id===quiz.quizId));assert.equal(quizGone.state.quizzes.length,0);
- const display=new Client('display',created.displayToken),displayAuth=await display.open();assert.equal(displayAuth.state.players.length,4);assert.ok(!('quizzes' in displayAuth.state));
+ const display=new Client('display',hostSecret),displayAuth=await display.open();assert.equal(displayAuth.state.players.length,4);assert.ok(!('quizzes' in displayAuth.state));
  const selectedHistory=await stateAfter(display,'game.select',{gameId});assert.equal(selectedHistory.state.game.id,gameId);
  display.send({type:'question.next',gameId:nextGame.state.activeGameId,questionId:nextGame.state.game.questions[0].id});
  await new Promise((ok,no)=>{const timer=setTimeout(()=>no(Error('Display mutation was not rejected')),5000);display.ws.once('close',()=>{clearTimeout(timer);ok()})});
- const wrong=new Client('host',created.displayToken);await assert.rejects(wrong.open());close(wrong);
+ const wrong=new Client('host','a'.repeat(16));await assert.rejects(wrong.open());close(wrong);
  close(host,secondHost,oversized,display);console.log('Games and shared-question-pool end-to-end feature suite passed');
 })().catch(e=>{console.error(e);process.exit(1)});

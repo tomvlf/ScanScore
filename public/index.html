@@ -91,10 +91,10 @@
       <span>Wachtwoord</span>
       <span class="input-wrap">
         <svg class="icon" aria-hidden="true"><use href="#i-lock"/></svg>
-        <input id="secret" type="password" required maxlength="128" pattern="[0-9]{8,16}|.{12,128}" autocomplete="current-password">
+        <input id="secret" type="password" required minlength="16" maxlength="128" autocomplete="current-password">
         <button id="toggleSecret" class="input-action" type="button" aria-label="Wachtwoord tonen"><svg class="icon" aria-hidden="true"><use href="#i-eye"/></svg></button>
       </span>
-      <small>Minstens 12 tekens of 8–16 cijfers.</small>
+      <small>Gebruik een wachtzin van minstens 16 tekens.</small>
     </label>
     <div id="loginMessage" class="form-note hidden" role="status"></div>
     <div class="auth-actions">
@@ -105,7 +105,7 @@
       <svg class="icon" aria-hidden="true"><use href="#i-qr"/></svg>
       <p><strong>Voor het eerst?</strong> Kies een naam en wachtwoord en klik op <strong>Nieuwe ruimte</strong>. Je bent daarna meteen aangemeld op dit apparaat.</p>
     </div>
-    <p class="secure-note"><svg class="icon" aria-hidden="true"><use href="#i-lock"/></svg>Beveiligde ruimte · aanmelding blijft 30 dagen actief</p>
+    <p class="secure-note"><svg class="icon" aria-hidden="true"><use href="#i-lock"/></svg>Beveiligde ruimte · aanmelding blijft 24 uur actief</p>
   </form>
  </section>
 
@@ -288,6 +288,19 @@
     <section class="card session-card">
       <div><strong>Deze sessie</strong><p>Afmelden trekt de aanmelding op dit apparaat in. Gebruik dit op gedeelde toestellen.</p></div>
       <button id="logoutMore" class="ghost" type="button"><svg class="icon" aria-hidden="true"><use href="#i-lock"/></svg>Afmelden</button>
+    </section>
+    <section class="card session-card">
+      <div>
+        <strong>Wachtwoord wijzigen</strong>
+        <p>Dit trekt alle actieve sessies in. Kies een sterke nieuwe wachtzin.</p>
+        <form id="passwordForm" class="stacked-form">
+          <label class="field"><span>Huidig wachtwoord</span><input id="currentPassword" type="password" minlength="16" maxlength="128" required autocomplete="current-password"></label>
+          <label class="field"><span>Nieuw wachtwoord</span><input id="newPassword" type="password" minlength="16" maxlength="128" required autocomplete="new-password"></label>
+          <button class="secondary" type="submit">Wachtwoord wijzigen</button>
+        </form>
+        <p id="passwordMessage" class="form-note hidden" role="status"></p>
+      </div>
+      <button id="logoutAll" class="danger-ghost" type="button">Alle sessies afmelden</button>
     </section>
    </section>
   </div>

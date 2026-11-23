@@ -38,18 +38,29 @@ Maak een back-up met `./scripts/backup.sh`. Test herstel periodiek in een afzond
 
 ## Aanmelden
 De spelbediening en het scorescherm gebruiken dezelfde ruimtenaam en hetzelfde
-wachtwoord. Een intrekbare HttpOnly-cookie bewaart de aanmelding 30 dagen, ook na
-vernieuwen of heropenen van de browser. In productie is de cookie uitsluitend via
-HTTPS beschikbaar. **Afmelden** trekt de browsersessie voor beide schermen in.
-Het wachtwoord wordt niet in browseropslag bewaard. Het scorescherm blijft
-alleen-lezen, maar wie het wachtwoord kent kan ook de spelbediening openen.
+wachtwoord. Een intrekbare `Secure`, `HttpOnly`-cookie bewaart de aanmelding
+maximaal 24 uur. Na de login gebruikt de WebSocket alleen een rolgebonden,
+eenmalige ticket met een geldigheid van 30 seconden; wachtwoorden gaan nooit
+via de WebSocket. In productie is de cookie uitsluitend via HTTPS beschikbaar.
+**Afmelden** trekt de browsersessie en open tickets in. Het wachtwoord wordt
+niet in browseropslag bewaard. Het scorescherm blijft alleen-lezen, maar wie
+het gedeelde wachtwoord kent kan ook de spelbediening openen.
+
+Wijzig een vermoed gelekt wachtwoord via **Meer > Wachtwoord wijzigen**. Alle
+host- en displaysessies worden daarbij ingetrokken. Via **Alle sessies
+afmelden** kan alleen de host alle apparaten ontkoppelen zonder het wachtwoord
+te wijzigen.
 
 ## Extra hardening
 - Database zit uitsluitend op een intern Docker-netwerk en publiceert geen poort.
 - PostgreSQL gebruikt SCRAM-SHA-256 en time-outs.
 - Hostwachtwoorden gebruiken scrypt + unieke salt + server-pepper.
+- Nieuwe ruimtes vereisen minstens 16 tekens; loginpogingen worden persistent begrensd per client en ruimte.
+- Sessies bevatten een niet-opwaardeerbare `host`- of `display`-rol; muterende HTTP-routes vereisen `host`.
+- WebSocket-tickets zijn rolgebonden, gehasht opgeslagen, eenmalig bruikbaar en 30 seconden geldig.
+- Per ruimte blijven maximaal 12 actieve sessies; oudere sessies worden ingetrokken.
+- CI controleert productiedependencies met `npm audit --audit-level=high`.
 - QR-waarden worden gezocht via HMAC en versleuteld met AES-256-GCM opgeslagen.
-- Displaytokens zijn read-only, gehasht en intrekbaar.
 - SQL is geparameteriseerd; databaseconstraints beschermen integriteit.
 - Auditlog gebruikt UTC, correlation IDs en gehashte IP-adressen.
 - Strikte Origin-allowlist, CSP, WSS, payload-, login- en berichtlimieten.

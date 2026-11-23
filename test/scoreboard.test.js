@@ -64,9 +64,12 @@ async function scoreboard({savedSession=null,loginStatus=200,sessionResponse=nul
   close(){}
  }
  const browser=vm.createContext({document,location,WebSocket,fetch:async(url,options)=>{
-  assert.equal(url,'/api/session');requests.push(options);
+   assert.ok(url.startsWith('/api/session'));requests.push(options);
   const status=options.method==='GET'?(savedSession?200:401):loginStatus;
-  return {status,ok:status===200,json:async()=>sessionResponse||savedSession||{roomName:'Family Quiz'}};
+   const response=sessionResponse||savedSession||(options.method==='POST'
+    ?{roomName:'Family Quiz',socketTicket:'signed-ticket'}
+    :{roomName:'Family Quiz'});
+   return {status,ok:status===200,json:async()=>response};
  }});
  for(const file of ['scores.js','session.js','scoreboard.js'])vm.runInContext(fs.readFileSync('public/'+file,'utf8'),browser);
  await new Promise(setImmediate);
@@ -80,7 +83,7 @@ test('scoreboard uses room credentials, clears the password and opens a read-onl
  assert.deepEqual(JSON.parse(app.requests.find(r=>r.method==='POST').body),{roomName:'Family Quiz',secret:'a long host password'});
  assert.equal($('#secret').value,'');
  app.sockets[0].onopen();
- assert.deepEqual(app.sockets[0].messages,[{type:'auth',role:'display'}]);
+ assert.deepEqual(app.sockets[0].messages,[{type:'auth',role:'display',socketTicket:'signed-ticket'}]);
  app.sockets[0].onmessage({data:JSON.stringify({type:'auth.ok',state:{title:'Family Quiz',games:[],players:[],game:null,revision:1}})});
  assert.equal($('#auth').classList.contains('hidden'),true);
  assert.equal($('#board').classList.contains('hidden'),false);

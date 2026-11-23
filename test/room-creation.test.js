@@ -2,7 +2,7 @@
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
 const app=fs.readFileSync('public/app.js','utf8');
 
-function browser(fetch,{savedSession=null,loginStatus=200,sessionResponse=null}={}){
+function browser(fetch,{savedSession=null,loginStatus=200,sessionResponse=null,sessionFetch=null}={}){
  const elements=new Map(),sockets=[],sessionRequests=[];
  const document={
   querySelector(selector){
@@ -20,10 +20,14 @@ function browser(fetch,{savedSession=null,loginStatus=200,sessionResponse=null}=
   close(){}
  }
  const context=vm.createContext({document,fetch:async(url,options)=>{
-  if(url!=='/api/session')return fetch(url,options);
+   if(!url.startsWith('/api/session'))return fetch(url,options);
   sessionRequests.push(options);
+  if(sessionFetch)return sessionFetch(options,sessionRequests);
   const status=options.method==='GET'?(savedSession?200:401):loginStatus;
-  return {status,ok:status===200,json:async()=>sessionResponse||savedSession||{roomName:'Family Quiz'}};
+  const response=sessionResponse||savedSession||(options.method==='POST'
+   ?{roomName:'Family Quiz',socketTicket:'signed-ticket'}
+   :{roomName:'Family Quiz'});
+  return {status,ok:status===200,json:async()=>response};
  },WebSocket,location:{protocol:'https:',host:'quiz.example.test'},confirm(){return true},setTimeout(){},clearTimeout(){}});
  vm.runInContext(fs.readFileSync('public/session.js','utf8'),context);
  vm.runInContext(fs.readFileSync('public/scores.js','utf8'),context);
@@ -49,7 +53,7 @@ test('creating a room automatically signs in with the chosen name and password',
  let request;
  const {$,sockets,sessionRequests}=browser(async(_url,options)=>{
   request=JSON.parse(options.body);
-  return {status:201,ok:true,json:async()=>({roomId:'internal-room-id',displayToken:'test-display-token'})};
+  return {status:201,ok:true,json:async()=>({roomId:'internal-room-id'})};
  });
  const creating=$('#create').onclick();
  $('#roomName').value='Changed while creating';$('#secret').value='another password';
@@ -57,10 +61,10 @@ test('creating a room automatically signs in with the chosen name and password',
  assert.deepEqual(request,{roomName:'Family Quiz',hostSecret:'a long host password'});
  assert.equal(sockets.length,1);
  const socket=sockets[0];socket.onopen();
- assert.deepEqual(socket.messages[0],{type:'auth',role:'host'});
+ assert.deepEqual(socket.messages[0],{type:'auth',role:'host',socketTicket:'signed-ticket'});
  assert.deepEqual(JSON.parse(sessionRequests.find(r=>r.method==='POST').body),{roomName:'Family Quiz',secret:'a long host password'});
  assert.equal($('#secret').value,'');
- assert.ok(!$('#loginMessage').textContent.includes('test-display-token'));
+ assert.ok(!JSON.stringify(sessionRequests).includes('test-display-token'));
  socket.onmessage({data:JSON.stringify({type:'auth.ok',roomId:'internal-room-id',state:{games:[],game:null,activeGameId:null,players:[],revision:1}})});
  assert.equal($('#login').classList.contains('hidden'),true);
  assert.equal($('#app').classList.contains('hidden'),false);
@@ -72,7 +76,7 @@ test('returning hosts sign in with room name and password, never a generated tok
  await $('#loginForm').onsubmit({preventDefault(){}});
  sockets[0].onopen();
  assert.deepEqual(JSON.parse(sessionRequests.find(r=>r.method==='POST').body),{roomName:'Family Quiz',secret:'a long host password'});
- assert.deepEqual(sockets[0].messages[0],{type:'auth',role:'host'});
+ assert.deepEqual(sockets[0].messages[0],{type:'auth',role:'host',socketTicket:'signed-ticket'});
  sockets[0].onclose({code:4401});
  assert.match($('#loginMessage').textContent,/aanmelding is verlopen/);
 });
@@ -93,6 +97,22 @@ test('hosts authenticate the new socket once with a short-lived ticket',async()=
  await $('#loginForm').onsubmit({preventDefault(){}});
  sockets[0].onopen();
  assert.deepEqual(sockets[0].messages,[{type:'auth',role:'host',socketTicket:'signed-ticket'}]);
+});
+
+test('a slow boot restore cannot replace the ticket from a newly created room',async()=>{
+ let releaseRestore;
+ const restoreResponse=new Promise(resolve=>{releaseRestore=resolve});
+ const {$,sockets}=browser(()=>assert.fail('Unexpected fetch'),{
+  sessionFetch:async options=>{
+   if(options.method==='GET')return restoreResponse;
+   return {status:200,ok:true,json:async()=>({roomName:'New Room',socketTicket:'new-room-ticket'})};
+  }
+ });
+ await $('#loginForm').onsubmit({preventDefault(){}});
+ releaseRestore({status:401,ok:false,json:async()=>({error:'session_expired'})});
+ await new Promise(setImmediate);
+ sockets[0].onopen();
+ assert.deepEqual(sockets[0].messages,[{type:'auth',role:'host',socketTicket:'new-room-ticket'}]);
 });
 
 test('incorrect login credentials stay on the form without opening a socket',async()=>{

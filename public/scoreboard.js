@@ -105,13 +105,17 @@ $('#fullscreen').onclick = () => {
 
 async function connect(resume = false) {
   try {
-    if (!resume) await roomSession.login($('#roomName').value.trim(), $('#secret').value);
+    let socketTicket;
+    if (!resume) {
+      const session = await roomSession.login($('#roomName').value.trim(), $('#secret').value, 'display');
+      socketTicket = session.socketTicket;
+    } else if (typeof resume === 'object') socketTicket = resume.socketTicket;
     $('#secret').value = '';
     $('#authMessage').textContent = '';
     $('#authMessage').classList.add('hidden');
     ws?.close();
     const socket = ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`);
-    socket.onopen = () => socket.send(JSON.stringify(roomSession.authentication('display')));
+    socket.onopen = () => socket.send(JSON.stringify(roomSession.authentication('display', socketTicket)));
     socket.onmessage = event => {
       if (ws !== socket) return;
       const message = JSON.parse(event.data);
@@ -141,10 +145,10 @@ $('#auth').onsubmit = event => {
   return connect();
 };
 
-roomSession.restore().then(session => {
+roomSession.restore('display').then(session => {
   if (session) {
     $('#roomName').value = session.roomName;
-    return connect(true);
+    return connect(session);
   }
 }).catch(error => {
   $('#authMessage').classList.remove('hidden');

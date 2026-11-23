@@ -682,13 +682,17 @@ function loginMessage(message) {
 
 async function connect(name = $('#roomName').value.trim(), password = $('#secret').value, resume = false) {
   try {
-    if (!resume) await roomSession.login(name, password);
+    let socketTicket;
+    if (!resume) {
+      const session = await roomSession.login(name, password, 'host');
+      socketTicket = session.socketTicket;
+    } else if (typeof resume === 'object') socketTicket = resume.socketTicket;
     $('#secret').value = '';
     status('Verbinden…');
     ws?.close();
     const socket = ws = new WebSocket(wsUrl());
 
-    socket.onopen = () => socket.send(JSON.stringify(roomSession.authentication('host')));
+    socket.onopen = () => socket.send(JSON.stringify(roomSession.authentication('host', socketTicket)));
 
     socket.onmessage = event => {
       if (ws !== socket) return;
@@ -785,6 +789,15 @@ $('#create').onclick = async () => {
   if (!$('#loginForm').reportValidity()) return;
   const name = $('#roomName').value.trim();
   const password = $('#secret').value;
+  if (password.length < 16 || password.length > 128) {
+    const message = 'Gebruik een wachtzin van minstens 16 tekens.';
+    $('#secret').setCustomValidity?.(message);
+    $('#secret').reportValidity?.();
+    loginMessage(message);
+    toast(message);
+    return;
+  }
+  $('#secret').setCustomValidity?.('');
   $('#create').disabled = true;
   try {
     const response = await fetch('/api/rooms', {
@@ -802,7 +815,7 @@ $('#create').onclick = async () => {
     const data = await response.json();
     if (!response.ok) {
       const message = data.error === 'invalid_input'
-        ? 'Vul een ruimtenaam van maximaal 80 tekens in en een wachtwoord van minstens 12 tekens of 8–16 cijfers.'
+        ? 'Vul een ruimtenaam van maximaal 80 tekens en een wachtwoord of wachtzin van minstens 16 tekens in.'
         : 'Ruimte kon niet worden aangemaakt. Probeer het later opnieuw.';
       loginMessage(message);
       toast(message);
@@ -816,6 +829,35 @@ $('#create').onclick = async () => {
     toast(message);
   } finally {
     $('#create').disabled = false;
+  }
+};
+
+$('#passwordForm').onsubmit = async event => {
+  event.preventDefault();
+  const current = $('#currentPassword').value;
+  const next = $('#newPassword').value;
+  $('#passwordMessage').classList.add('hidden');
+  try {
+    if (!event.target.reportValidity()) return;
+    await roomSession.rotatePassword($('#roomName').value.trim(), current, next);
+    $('#currentPassword').value = '';
+    $('#newPassword').value = '';
+    $('#passwordMessage').textContent = 'Wachtwoord gewijzigd. Alle andere sessies zijn ingetrokken.';
+    $('#passwordMessage').classList.remove('hidden');
+    location.reload();
+  } catch (error) {
+    $('#passwordMessage').textContent = error.message;
+    $('#passwordMessage').classList.remove('hidden');
+  }
+};
+
+$('#logoutAll').onclick = async () => {
+  if (!await ask('Alle sessies afmelden?', 'Alle bedienings- en scoreschermen worden onmiddellijk uitgelogd.', 'Afmelden')) return;
+  try {
+    await roomSession.logoutAll();
+    location.href = '/';
+  } catch (error) {
+    toast(error.message);
   }
 };
 
@@ -1064,9 +1106,9 @@ $('#pair').onclick = async () => {
 
 /* ---------- Boot ---------- */
 
-roomSession.restore().then(session => {
+roomSession.restore('host').then(session => {
   if (session) {
     $('#roomName').value = session.roomName;
-    return connect(undefined, undefined, true);
+    return connect(undefined, undefined, session);
   }
 }).catch(error => loginMessage('Aanmelding herstellen mislukt. Controleer je verbinding en probeer opnieuw. ' + error.message));
