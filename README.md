@@ -374,7 +374,9 @@ docker compose exec -T db sh -c 'PGPASSWORD="$POSTGRES_PASSWORD" psql -U scansco
 ```
 
 Een volledig nieuwe installatie krijgt de kolom automatisch via
-`postgres-init/003-schema.sql`.
+`postgres-init/003-schema.sql`. Zonder de kolom blijft de schermkeuze tijdens
+de huidige serverrun werken, maar ze wordt pas na het toevoegen van de kolom
+over een herstart heen bewaard.
 
 ## Back-up maken
 

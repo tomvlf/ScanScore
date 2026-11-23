@@ -5,7 +5,7 @@ const DATABASE_URL=secret('DATABASE_URL_FILE','DATABASE_URL'),PEPPER=secret('SEC
 const PORT=+(process.env.PORT||8080),PUBLIC=path.join(__dirname,'public'),ORIGINS=(process.env.ALLOWED_ORIGINS||'http://localhost:8080').split(',').map(s=>s.trim()).filter(Boolean),QR_KEY=Buffer.from(QR_SECRET||'','base64'),TRUST_PROXY_HOPS=proxyHops();if(!DATABASE_URL||!PEPPER||QR_KEY.length!==32)throw new Error('Database URL, secret pepper and 32-byte QR encryption key are required');
 const SESSION_TTL_SECONDS=24*60*60,LOGIN_CLIENT_LIMIT=8,LOGIN_ROOM_LIMIT=30;
 const db=new Pool({connectionString:DATABASE_URL,max:+process.env.DB_POOL_MAX||10,idleTimeoutMillis:30000,connectionTimeoutMillis:5000,ssl:process.env.DB_SSL==='1'?{rejectUnauthorized:true,ca:process.env.DB_CA}:false,application_name:'scorescan-v1'});db.on('error',e=>log('critical','db_pool_error',{message:e.message}));
-const ipBuckets=new Map(),authBuckets=new Map(),connections=new Map(),imageBuckets=new Map(),quizBuckets=new Map(),hashQueue=[];let hashActive=false;
+const ipBuckets=new Map(),authBuckets=new Map(),connections=new Map(),imageBuckets=new Map(),quizBuckets=new Map(),displayModes=new Map(),hashQueue=[];let hashActive=false;
 const b64=n=>crypto.randomBytes(n).toString('base64url'),safeEq=(a,b)=>a.length===b.length&&crypto.timingSafeEqual(a,b);function hmac(x){return crypto.createHmac('sha256',PEPPER).update(x).digest()}
 function proxyHops(){const raw=process.env.TRUST_PROXY_HOPS??(process.env.TRUST_PROXY==='1'?'1':'0'),value=Number(raw);return Number.isInteger(value)&&value>=0&&value<=8?value:0}
 function drainHashes(){
@@ -200,7 +200,7 @@ async function state(c,slug,gameId,includeQuizzes=false){
    const quizQuestions=quizIds.length?(await c.query('SELECT quiz_id,id,ordinal,prompt,points,image_id FROM quiz_questions WHERE quiz_id=ANY($1::uuid[]) ORDER BY quiz_id,ordinal',[quizIds])).rows:[];
    quizzes=quizRows.map(q=>({id:q.id,title:q.title,updatedAt:q.updated_at,questions:quizQuestions.filter(x=>x.quiz_id===q.id).map(x=>({id:x.id,ordinal:x.ordinal,prompt:x.prompt,points:x.points,imageId:x.image_id,imageUrl:x.image_id?'/api/images/'+x.image_id:null,thumbUrl:x.image_id?'/api/images/'+x.image_id+'?thumb=1':null}))}));
   }
-  const result={title:r.title,displayMode:r.display_mode||'scores',games,activeGameId:activeGame?.id||null,game:game?{...game,questions:questions.map(q=>({...q,prompt:q.prompt,imageId:q.image_id,imageUrl:q.image_id?'/api/images/'+q.image_id:null,thumbUrl:q.image_id?'/api/images/'+q.image_id+'?thumb=1':null,winners:awards.filter(a=>a.question_id===q.id).map(a=>({playerId:a.player_id,points:Number(a.points)}))}))}:null,players,...(includeQuizzes?{quizzes}:{}),revision:Number(r.revision)};
+  const result={title:r.title,displayMode:displayModes.get(r.id)||r.display_mode||'scores',games,activeGameId:activeGame?.id||null,game:game?{...game,questions:questions.map(q=>({...q,prompt:q.prompt,imageId:q.image_id,imageUrl:q.image_id?'/api/images/'+q.image_id:null,thumbUrl:q.image_id?'/api/images/'+q.image_id+'?thumb=1':null,winners:awards.filter(a=>a.question_id===q.id).map(a=>({playerId:a.player_id,points:Number(a.points)}))}))}:null,players,...(includeQuizzes?{quizzes}:{}),revision:Number(r.revision)};
   await c.query('COMMIT');return result;
  }catch(e){await c.query('ROLLBACK');throw e}
 }
@@ -426,7 +426,16 @@ async function act(ws,m){
   }else if(m.type==='display.mode'){
    const mode=['scores','question'].includes(m.mode)?m.mode:null;
    if(!mode)throw Error('mode');
-   await c.query('UPDATE rooms SET display_mode=$1 WHERE id=$2',[mode,room.id]);
+   await c.query('SAVEPOINT display_mode');
+   try{
+    await c.query('UPDATE rooms SET display_mode=$1 WHERE id=$2',[mode,room.id]);
+    await c.query('RELEASE SAVEPOINT display_mode');
+   }catch(error){
+    await c.query('ROLLBACK TO SAVEPOINT display_mode');await c.query('RELEASE SAVEPOINT display_mode');
+    if(error.code!=='42703')throw error;
+    log('warning','display_mode_column_missing',{roomId:room.id});
+   }
+   displayModes.set(room.id,mode);
   }else if(m.type==='game.start'){
    const quizId=m.quizId===undefined||m.quizId===null||m.quizId===''?null:m.quizId;
    const points=integer(m.pointsPerQuestion,1,1000000);
