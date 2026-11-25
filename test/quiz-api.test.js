@@ -13,7 +13,7 @@ function application(missingDisplayMode=false){
    if(sql.startsWith('SELECT * FROM rooms WHERE id=$1 FOR UPDATE'))return {rows:[{id:'room-id',slug:'room-slug',title:'Testruimte'}],rowCount:1};
    if(sql.startsWith('SELECT 1 FROM games WHERE room_id'))return {rows:[],rowCount:0};
    if(sql.startsWith('SELECT id,title,language_primary,language_secondary FROM quizzes'))return {rows:[{id:QUIZ,title:'Filmavond',language_primary:'Nederlands',language_secondary:'English'}],rowCount:1};
-   if(sql.startsWith('SELECT prompt,prompt_alt,points,image_id FROM quiz_questions'))return {rows:stored.map(row=>({prompt:row[2],prompt_alt:row[3],points:row[4],image_id:row[5]})),rowCount:stored.length};
+   if(sql.startsWith('SELECT prompt,prompt_alt,points,layout,image_id FROM quiz_questions'))return {rows:stored.map(row=>({prompt:row[2],prompt_alt:row[3],points:row[4],layout:row[5],image_id:row[6]})),rowCount:stored.length};
    if(sql.startsWith('INSERT INTO games')){games.push(values);return {rows:[{id:'game-id'}],rowCount:1}};
    if(sql.startsWith('INSERT INTO game_questions')){gameQuestions.push(values);return {rows:[],rowCount:1}};
    if(sql.startsWith('INSERT INTO quizzes')){const id=QUIZ;quizzes.push({id,values});return {rows:[{id}],rowCount:1}}
@@ -66,14 +66,14 @@ test('quiz save stores ordered questions and validates image ownership',async()=
  const app=application();
  const body={title:'Filmavond',languagePrimary:'Nederlands',languageSecondary:'English',questions:[
   {prompt:'Eerste vraag?',promptAlt:'First question?',points:25,imageId:IMAGE},
-  {prompt:'Tweede vraag?',points:75,imageId:IMAGE}
+  {prompt:'Tweede vraag?',points:75,layout:'split',imageId:IMAGE}
  ]};
  const created=await save(app,body);
  assert.equal(created.status,201);
  assert.equal(created.body.quizId,QUIZ);
  assert.equal(JSON.stringify(app.stored.map(row=>row.slice(1))),JSON.stringify([
-  [1,'Eerste vraag?','First question?',25,IMAGE],
-  [2,'Tweede vraag?',null,75,IMAGE]
+  [1,'Eerste vraag?','First question?',25,'stacked',IMAGE],
+  [2,'Tweede vraag?',null,75,'split',IMAGE]
  ]));
  const duplicate=await save(app,{title:'Andere quiz',questions:[{prompt:'Vraag?',points:10,imageId:'22222222-2222-4222-8222-222222222222'}]});
  assert.equal(duplicate.status,400);
@@ -84,8 +84,8 @@ test('quiz save stores ordered questions and validates image ownership',async()=
  assert.equal(socket.gameId,'game-id',JSON.stringify(messages));
  assert.equal(JSON.stringify(app.games),JSON.stringify([['room-id',25,QUIZ,'Filmavond','Nederlands','English',2]]));
  assert.equal(JSON.stringify(app.gameQuestions),JSON.stringify([
-  ['game-id',1,25,'Vraag 1','Eerste vraag?','First question?',IMAGE],
-  ['game-id',2,75,'Vraag 2','Tweede vraag?',null,IMAGE]
+  ['game-id',1,25,'Vraag 1','Eerste vraag?','First question?','stacked',IMAGE],
+  ['game-id',2,75,'Vraag 2','Tweede vraag?',null,'split',IMAGE]
  ]));
 });
 

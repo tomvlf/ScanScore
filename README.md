@@ -128,8 +128,9 @@ docker compose pull
 docker compose up -d --no-build
 ```
 
-De image `ghcr.io/tomvlf/scanscore:latest` wordt na iedere push naar `main`
-gepubliceerd voor `linux/amd64` en `linux/arm64`, net als bij Athlima.
+De image `ghcr.io/tomvlf/scanscore:latest` wordt na een push naar `main`
+gepubliceerd voor `linux/amd64` en `linux/arm64` als de CI- en
+containerveiligheidscontroles voor dezelfde revisie slagen, net als bij Athlima.
 De eerste build moet voltooid zijn voordat je de image kunt ophalen.
 Elke containerworkflow-run krijgt ook een oplopend versienummer `1.0.<runnummer>`
 en een vaste tag `sha-<volledige-commit-SHA>`. Stel `SCANSCORE_IMAGE_TAG` in
