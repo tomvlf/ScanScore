@@ -27,6 +27,7 @@ jobs:
           RUNTIME_DATABASE_URL=postgresql://scanscore_runtime:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb@db:5432/scanscore
           SECRET_PEPPER=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
           QR_ENCRYPTION_KEY=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+          BACKUP_PASSPHRASE=cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
           EOF
           sh scripts/preflight.sh
           COMPOSE_FILE=compose.yml:compose.ghcr.example.yml sh scripts/preflight.sh

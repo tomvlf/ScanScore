@@ -79,7 +79,7 @@ function close(...clients){for(const c of clients)c?.close()}
  st=await stateAfter(host,'game.select',{gameId:null});assert.equal(st.state.game.id,nextGame.state.activeGameId);assert.equal(score(st.state,'Alice'),0);
  await stateAfter(host,'game.stop',{gameId:nextGame.state.activeGameId,questionId:nextGame.state.game.questions[0].id});
  const login=await fetch(APP+'/api/session?role=host',{method:'POST',headers:{origin:ORIGIN,'content-type':'application/json'},body:JSON.stringify({roomName:room,secret:hostSecret})});
- assert.equal(login.status,200);const cookie=(login.headers.get('set-cookie')||'').split(';')[0];assert.match(cookie,/^scorescan_session=/);
+ assert.equal(login.status,200);const cookie=(login.headers.get('set-cookie')||'').split(';')[0];assert.match(cookie,/^(__Host-)?scorescan_session=/);
  const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=','base64');
  r=await fetch(APP+'/api/images',{method:'POST',headers:{origin:ORIGIN,'content-type':'image/png'},body:png});assert.equal(r.status,401);
  r=await fetch(APP+'/api/images',{method:'POST',headers:{origin:ORIGIN,'content-type':'image/png',cookie},body:Buffer.from('not an image')});assert.equal(r.status,415);

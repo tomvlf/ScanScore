@@ -17,7 +17,7 @@
 - [ ] Voer `./scripts/generate-secrets.sh` uit.
 - [ ] Controleer dat `.env` modus 600 heeft.
 - [ ] Bewaar owner- en runtimecredential afzonderlijk in de password manager.
-- [ ] Bewaar de pepper en QR-encryptiesleutel buiten de server in een herstelkluis.
+- [ ] Bewaar de pepper, QR-encryptiesleutel en back-uppassphrase buiten de server in een herstelkluis.
 - [ ] Zet in `.env` exact `ALLOWED_ORIGINS=https://jouwdomein` zonder wildcard.
 
 ## 4. Preflight
@@ -59,14 +59,15 @@
 - [ ] Controleer dat een display-ticket geen hostacties kan uitvoeren of hergebruikt kan worden.
 - [ ] Controleer dat de ruimtecreatielimiet na 15 seconden opnieuw toelaat.
 - [ ] Controleer dat WebSocket-login zonder een eenmalige ticket wordt geweigerd.
-- [ ] Test dat de negende loginpoging per client binnen 15 minuten wordt geblokkeerd.
+- [ ] Test dat de negende loginpoging per client-en-ruimtecombinatie binnen 15 minuten wordt geblokkeerd, terwijl een andere client nog kan aanmelden.
 
 ## 9. Back-up en herstel
-- [ ] Maak een eerste `pg_dump` in custom format.
-- [ ] Versleutel en kopieer de back-up off-host.
+- [ ] Maak een eerste versleutelde back-up met `./scripts/backup.sh`.
+- [ ] Kopieer de back-up off-host en bewaar `BACKUP_PASSPHRASE` apart.
 - [ ] Herstel de dump in een afzonderlijke testdatabase.
 - [ ] Documenteer RPO, RTO, retentie en verantwoordelijke persoon.
 - [ ] Plan automatische back-ups en waarschuwingen bij mislukking.
+- [ ] Plan dagelijkse `./scripts/retention.sh` via cron (90 dagen auditretentie).
 
 ## 10. Monitoring en onderhoud
 - [ ] Centraliseer JSON-logs en beperk toegang.

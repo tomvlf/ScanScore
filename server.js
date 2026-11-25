@@ -3,16 +3,16 @@ const http=require('http'),fs=require('fs'),path=require('path'),crypto=require(
 function secret(fileEnv,valueEnv){const file=process.env[fileEnv];if(file)return fs.readFileSync(file,'utf8').trim();return process.env[valueEnv]}
 const DATABASE_URL=secret('DATABASE_URL_FILE','DATABASE_URL'),PEPPER=secret('SECRET_PEPPER_FILE','SECRET_PEPPER'),QR_SECRET=secret('QR_ENCRYPTION_KEY_FILE','QR_ENCRYPTION_KEY');
 const PORT=+(process.env.PORT||8080),PUBLIC=path.join(__dirname,'public'),ORIGINS=(process.env.ALLOWED_ORIGINS||'http://localhost:8080').split(',').map(s=>s.trim()).filter(Boolean),QR_KEY=Buffer.from(QR_SECRET||'','base64'),TRUST_PROXY_HOPS=proxyHops();if(!DATABASE_URL||!PEPPER||QR_KEY.length!==32)throw new Error('Database URL, secret pepper and 32-byte QR encryption key are required');
-const SESSION_TTL_SECONDS=24*60*60,LOGIN_CLIENT_LIMIT=8,LOGIN_ROOM_LIMIT=30;
+const SESSION_TTL_SECONDS=24*60*60,LOGIN_PAIR_LIMIT=8,LOGIN_ROOM_DELAY_THRESHOLD=30,HASH_CONCURRENCY=2,MAX_IMAGE_READS=6;
 const db=new Pool({connectionString:DATABASE_URL,max:+process.env.DB_POOL_MAX||10,idleTimeoutMillis:30000,connectionTimeoutMillis:5000,ssl:process.env.DB_SSL==='1'?{rejectUnauthorized:true,ca:process.env.DB_CA}:false,application_name:'scorescan-v1'});db.on('error',e=>log('critical','db_pool_error',{message:e.message}));
-const ipBuckets=new Map(),authBuckets=new Map(),connections=new Map(),imageBuckets=new Map(),quizBuckets=new Map(),displayModes=new Map(),displayLanguages=new Map(),hashQueue=[];let hashActive=false;
+const ipBuckets=new Map(),authBuckets=new Map(),connections=new Map(),imageBuckets=new Map(),imageReadBuckets=new Map(),quizBuckets=new Map(),displayModes=new Map(),displayLanguages=new Map(),hashQueue=[];let hashActive=0,imageReadsInFlight=0;
 const b64=n=>crypto.randomBytes(n).toString('base64url'),safeEq=(a,b)=>a.length===b.length&&crypto.timingSafeEqual(a,b);function hmac(x){return crypto.createHmac('sha256',PEPPER).update(x).digest()}
 function proxyHops(){const raw=process.env.TRUST_PROXY_HOPS??(process.env.TRUST_PROXY==='1'?'1':'0'),value=Number(raw);return Number.isInteger(value)&&value>=0&&value<=8?value:0}
 function drainHashes(){
- if(hashActive||!hashQueue.length)return;hashActive=true;const job=hashQueue.shift();
- crypto.scrypt(job.secret+PEPPER,job.salt,64,{N:131072,r:8,p:1,maxmem:256*1024*1024},(error,key)=>{hashActive=false;if(error)job.reject(error);else job.resolve(key.toString('base64'));drainHashes()});
+ while(hashActive<HASH_CONCURRENCY&&hashQueue.length){hashActive++;const job=hashQueue.shift();
+ crypto.scrypt(job.secret+PEPPER,job.salt,64,{N:131072,r:8,p:1,maxmem:256*1024*1024},(error,key)=>{hashActive--;if(error)job.reject(error);else job.resolve(key.toString('base64'));drainHashes()});}
 }
-function scrypt(secret,salt){return new Promise((resolve,reject)=>{if(hashQueue.length>=8){const error=Error('hash queue full');error.code='RESOURCE_BUSY';reject(error);return}hashQueue.push({secret,salt,resolve,reject});drainHashes()})}
+function scrypt(secret,salt){return new Promise((resolve,reject)=>{if(hashQueue.length>=8){const error=Error('hash queue full');error.code='RESOURCE_BUSY';log('warning','hash_queue_full',{depth:hashQueue.length});reject(error);return}hashQueue.push({secret,salt,resolve,reject});if(hashQueue.length>=4)log('warning','hash_queue_depth',{depth:hashQueue.length,active:hashActive});drainHashes()})}
 async function passHash(secret,roomName){if(!strongPassword(secret,roomName))throw Object.assign(Error('weak_password'),{status:400});const salt=b64(16);return `scrypt$${salt}$${await scrypt(secret,salt)}`}
 async function passOk(secret,hash){try{const[,salt,expected]=hash.split('$');return safeEq(Buffer.from(await scrypt(secret,salt)),Buffer.from(expected))}catch(error){if(error.code==='RESOURCE_BUSY')throw error;return false}}
 const DUMMY_PASSWORD_HASH=`scrypt$${'A'.repeat(22)}$${Buffer.alloc(64).toString('base64')}`;
@@ -57,18 +57,23 @@ async function imageUpload(req,res,reqId){
  const type=String(req.headers['content-type']||'').split(';')[0].trim().toLowerCase();
  if(!IMAGE_TYPES.has(type)){res.writeHead(415);res.end('{"error":"unsupported_image"}');return}
  if(limited(imageBuckets,ip(req),30,15*60e3)){res.writeHead(429);res.end('{"error":"rate_limited"}');return}
+ let room=await sessionCheck(req,'host');
+ if(!room){res.writeHead(401);res.end('{"error":"session_expired"}');return}
+ if(imageReadsInFlight>=MAX_IMAGE_READS){res.writeHead(503);res.end('{"error":"temporarily_unavailable"}');return}
+ imageReadsInFlight++;
+ let data;
+ try{data=await readBuffer(req,MAX_IMAGE_BYTES)}catch(e){log('warning','image_rejected',{reason:e.code||e.message});res.writeHead(e.message==='large'?413:400);res.end('{"error":"image_upload_failed"}');return}finally{imageReadsInFlight--}
+ if(!data.length||imageMime(data)!==type){res.writeHead(415);res.end('{"error":"unsupported_image"}');return}
  const c=await db.connect();
  try{
-  const room=await savedSession(c,req,'host');
+  room=await savedSession(c,req,'host');
   if(!room){res.writeHead(401);res.end('{"error":"session_expired"}');return}
-  const data=await readBuffer(req,MAX_IMAGE_BYTES);
-  if(!data.length||imageMime(data)!==type){res.writeHead(415);res.end('{"error":"unsupported_image"}');return}
   const image=(await c.query('INSERT INTO quiz_images(room_id,mime,bytes,data) VALUES($1,$2,$3,$4) RETURNING id',[room.id,type,data.length,data])).rows[0];
   await audit(c,room.id,room.session_id,'image_uploaded','ok',reqId,req,{imageId:image.id,bytes:data.length,mime:type});
   res.writeHead(201);res.end(JSON.stringify({id:image.id,mime:type,bytes:data.length}));
  }catch(e){
   log('warning','image_rejected',{reason:e.code||e.message});
-  if(!res.headersSent)res.writeHead(e.message==='large'?413:400);
+  if(!res.headersSent)res.writeHead(400);
   res.end('{"error":"image_upload_failed"}');
  }finally{c.release()}
 }
@@ -78,19 +83,25 @@ async function imageThumb(req,res,id,reqId){
  const type=String(req.headers['content-type']||'').split(';')[0].trim().toLowerCase();
  if(!IMAGE_TYPES.has(type)){res.writeHead(415);res.end('{"error":"unsupported_image"}');return}
  if(limited(imageBuckets,ip(req),60,15*60e3)){res.writeHead(429);res.end('{"error":"rate_limited"}');return}
+ let room=await sessionCheck(req,'host');
+ if(!room){res.writeHead(401);res.end('{"error":"session_expired"}');return}
+ if(imageReadsInFlight>=MAX_IMAGE_READS){res.writeHead(503);res.end('{"error":"temporarily_unavailable"}');return}
+ imageReadsInFlight++;
+ let data;
+ try{data=await readBuffer(req,512*1024)}catch(e){log('warning','thumbnail_rejected',{reason:e.code||e.message});res.writeHead(e.message==='large'?413:400);res.end('{"error":"thumbnail_failed"}');return}finally{imageReadsInFlight--}
+ if(!data.length||imageMime(data)!==type){res.writeHead(415);res.end('{"error":"unsupported_image"}');return}
  const c=await db.connect();
  try{
-  const room=await savedSession(c,req,'host');
+  room=await savedSession(c,req,'host');
   if(!room){res.writeHead(401);res.end('{"error":"session_expired"}');return}
-  const data=await readBuffer(req,512*1024);
-  if(!data.length||imageMime(data)!==type){res.writeHead(415);res.end('{"error":"unsupported_image"}');return}
   if(!(await c.query('UPDATE quiz_images SET thumb_mime=$1,thumb_bytes=$2,thumb_data=$3 WHERE id=$4 AND room_id=$5 RETURNING id',[type,data.length,data,id,room.id])).rowCount){res.writeHead(404);res.end('{"error":"not_found"}');return}
   await audit(c,room.id,room.session_id,'image_thumbnail','ok',reqId,req,{imageId:id,bytes:data.length});
   res.writeHead(200);res.end('{"ok":true}');
- }catch(e){log('warning','thumbnail_rejected',{reason:e.code||e.message});if(!res.headersSent)res.writeHead(e.message==='large'?413:400);res.end('{"error":"thumbnail_failed"}')}finally{c.release()}
+ }catch(e){log('warning','thumbnail_rejected',{reason:e.code||e.message});if(!res.headersSent)res.writeHead(400);res.end('{"error":"thumbnail_failed"}')}finally{c.release()}
 }
 async function imageGet(req,res){
  sec(res);
+ if(limited(imageReadBuckets,ip(req),300,60000)){res.writeHead(429);res.end('{"error":"rate_limited"}');return}
  const parsed=new URL(req.url,'http://x'),id=(/^\/api\/images\/([0-9a-f-]{36})$/.exec(parsed.pathname)||[])[1],thumb=parsed.searchParams.get('thumb')==='1';
  if(!id){res.writeHead(404);res.end();return}
  const c=await db.connect();
@@ -106,35 +117,40 @@ async function imageGet(req,res){
 }
 async function broadcastState(slug){
  const c=await db.connect();
- try{for(const x of wss.clients)if(x.authed&&x.roomSlug===slug&&x.readyState===1){try{x.send(JSON.stringify({type:'state',state:await state(c,slug,x.gameId,x.role==='host')}))}catch(error){log('warning','state_send_failed',{reason:error.message})}}}finally{c.release()}
+ try{for(const x of wss.clients)if(x.authed&&x.roomSlug===slug&&x.readyState===1){if(Date.now()>=x.sessionExpiresAt){x.close(4401,'authentication_expired');continue}try{x.send(JSON.stringify({type:'state',state:await state(c,slug,x.gameId,x.role==='host')}))}catch(error){log('warning','state_send_failed',{reason:error.message})}}}finally{c.release()}
 }
 async function quizSave(req,res,reqId){
  sec(res);
  if(!ORIGINS.includes(req.headers.origin)){res.writeHead(403);res.end('{"error":"origin_denied"}');return}
+ let room=await sessionCheck(req,'host');
+ if(!room){res.writeHead(401);res.end('{"error":"session_expired"}');return}
+ if(limited(quizBuckets,ip(req),30,15*60e3)){res.writeHead(429);res.end('{"error":"rate_limited"}');return}
+ let body;
+ try{body=await read(req,262144)}catch(e){log('warning','quiz_rejected',{reason:e.code||e.message});res.writeHead(400);res.end('{"error":"quiz_save_failed"}');return}
+ const title=txt(body.title,120),input=Array.isArray(body.questions)?body.questions:[];
+ const languagePrimary=body.languagePrimary===undefined?'Nederlands':txt(body.languagePrimary,40),languageSecondary=body.languageSecondary===undefined?'English':txt(body.languageSecondary,40);
+ if(!title||!languagePrimary||!languageSecondary||!input.length||input.length>100){res.writeHead(400);res.end('{"error":"invalid_input"}');return}
+ const questions=[];
+ for(const item of input){
+  const prompt=txt(item&&item.prompt,500),points=integer(item&&item.points,1,1000000),imageId=item&&validUuid(item.imageId)?item.imageId:null;
+  const layout=['stacked','split','overlay','text'].includes(item&&item.layout)?item.layout:'stacked';
+  let promptAlt=null;
+  if(item&&item.promptAlt!==undefined&&item.promptAlt!==null&&item.promptAlt!==''){
+   if(typeof item.promptAlt!=='string'||!txt(item.promptAlt,500)){res.writeHead(400);res.end('{"error":"invalid_input"}');return}
+   promptAlt=txt(item.promptAlt,500);
+  }
+  if(!prompt||points===null||!imageId){res.writeHead(400);res.end('{"error":"invalid_input"}');return}
+  questions.push({prompt,promptAlt,points,layout,imageId});
+ }
+ const update=body.quizId!==undefined&&body.quizId!==null&&body.quizId!=='';
+ if(update&&!validUuid(body.quizId)){res.writeHead(400);res.end('{"error":"invalid_input"}');return}
  const c=await db.connect();let started=false;
  try{
-  const room=await savedSession(c,req,'host');
+  room=await savedSession(c,req,'host');
   if(!room){res.writeHead(401);res.end('{"error":"session_expired"}');return}
-  if(limited(quizBuckets,ip(req),30,15*60e3)){res.writeHead(429);res.end('{"error":"rate_limited"}');return}
-  const body=await read(req,262144),title=txt(body.title,120),input=Array.isArray(body.questions)?body.questions:[];
-  const languagePrimary=body.languagePrimary===undefined?'Nederlands':txt(body.languagePrimary,40),languageSecondary=body.languageSecondary===undefined?'English':txt(body.languageSecondary,40);
-  if(!title||!languagePrimary||!languageSecondary||!input.length||input.length>100){res.writeHead(400);res.end('{"error":"invalid_input"}');return}
-  const questions=[];
-  for(const item of input){
-   const prompt=txt(item&&item.prompt,500),points=integer(item&&item.points,1,1000000),imageId=item&&validUuid(item.imageId)?item.imageId:null;
-   let promptAlt=null;
-   if(item&&item.promptAlt!==undefined&&item.promptAlt!==null&&item.promptAlt!==''){
-    if(typeof item.promptAlt!=='string'||!txt(item.promptAlt,500)){res.writeHead(400);res.end('{"error":"invalid_input"}');return}
-    promptAlt=txt(item.promptAlt,500);
-   }
-   if(!prompt||points===null||!imageId){res.writeHead(400);res.end('{"error":"invalid_input"}');return}
-   questions.push({prompt,promptAlt,points,imageId});
-  }
   const ids=[...new Set(questions.map(q=>q.imageId))];
   const owned=(await c.query('SELECT id FROM quiz_images WHERE room_id=$1 AND id=ANY($2::uuid[])',[room.id,ids])).rows.map(row=>row.id);
   if(owned.length!==ids.length){res.writeHead(400);res.end('{"error":"invalid_image"}');return}
-  const update=body.quizId!==undefined&&body.quizId!==null&&body.quizId!=='';
-  if(update&&!validUuid(body.quizId)){res.writeHead(400);res.end('{"error":"invalid_input"}');return}
   await c.query('BEGIN');started=true;
   let quizId;
   if(update){
@@ -144,7 +160,7 @@ async function quizSave(req,res,reqId){
   }else{
    quizId=(await c.query('INSERT INTO quizzes(room_id,title,language_primary,language_secondary) VALUES($1,$2,$3,$4) RETURNING id',[room.id,title,languagePrimary,languageSecondary])).rows[0].id;
   }
-  for(let i=0;i<questions.length;i++)await c.query('INSERT INTO quiz_questions(quiz_id,ordinal,prompt,prompt_alt,points,image_id) VALUES($1,$2,$3,$4,$5,$6)',[quizId,i+1,questions[i].prompt,questions[i].promptAlt,questions[i].points,questions[i].imageId]);
+  for(let i=0;i<questions.length;i++)await c.query('INSERT INTO quiz_questions(quiz_id,ordinal,prompt,prompt_alt,points,layout,image_id) VALUES($1,$2,$3,$4,$5,$6,$7)',[quizId,i+1,questions[i].prompt,questions[i].promptAlt,questions[i].points,questions[i].layout,questions[i].imageId]);
   await c.query('UPDATE rooms SET revision=revision+1,updated_at=now() WHERE id=$1',[room.id]);
   await audit(c,room.id,room.session_id,update?'quiz_updated':'quiz_created','ok',reqId,req,{quizId,questions:questions.length});
   await c.query('COMMIT');started=false;
@@ -188,7 +204,7 @@ async function state(c,slug,gameId,includeQuizzes=false){
   if(!r){await c.query('COMMIT');return null}
   const games=(await c.query('SELECT id,points_per_question,current_question,legacy,started_at,ended_at,quiz_id,quiz_title,language_primary,language_secondary,question_count FROM games WHERE room_id=$1 ORDER BY started_at DESC,id',[r.id])).rows.map(g=>({id:g.id,pointsPerQuestion:g.points_per_question,question:g.current_question,legacy:g.legacy,startedAt:g.started_at,endedAt:g.ended_at,quizId:g.quiz_id,quizTitle:g.quiz_title,languagePrimary:g.language_primary,languageSecondary:g.language_secondary,questionCount:g.question_count}));
   const activeGame=games.find(g=>!g.endedAt),game=games.find(g=>g.id===gameId)||activeGame||games[0]||null;
-  const questions=game?(await c.query('SELECT id,ordinal,points,label,prompt,prompt_alt,image_id FROM game_questions WHERE game_id=$1 ORDER BY ordinal',[game.id])).rows:[];
+  const questions=game?(await c.query('SELECT id,ordinal,points,label,prompt,prompt_alt,layout,image_id FROM game_questions WHERE game_id=$1 ORDER BY ordinal',[game.id])).rows:[];
   const awards=game?(await c.query(`SELECT w.question_id,w.player_id,
    COALESCE(w.legacy_points::numeric,q.points::numeric/count(*) OVER(PARTITION BY q.id)) points
    FROM question_winners w JOIN game_questions q ON q.id=w.question_id WHERE q.game_id=$1`,[game.id])).rows:[];
@@ -203,18 +219,20 @@ async function state(c,slug,gameId,includeQuizzes=false){
   if(includeQuizzes){
    const quizRows=(await c.query('SELECT id,title,language_primary,language_secondary,updated_at FROM quizzes WHERE room_id=$1 ORDER BY updated_at DESC,id',[r.id])).rows;
    const quizIds=quizRows.map(q=>q.id);
-   const quizQuestions=quizIds.length?(await c.query('SELECT quiz_id,id,ordinal,prompt,prompt_alt,points,image_id FROM quiz_questions WHERE quiz_id=ANY($1::uuid[]) ORDER BY quiz_id,ordinal',[quizIds])).rows:[];
-   quizzes=quizRows.map(q=>({id:q.id,title:q.title,languagePrimary:q.language_primary,languageSecondary:q.language_secondary,updatedAt:q.updated_at,questions:quizQuestions.filter(x=>x.quiz_id===q.id).map(x=>({id:x.id,ordinal:x.ordinal,prompt:x.prompt,promptAlt:x.prompt_alt,points:x.points,imageId:x.image_id,imageUrl:x.image_id?'/api/images/'+x.image_id:null,thumbUrl:x.image_id?'/api/images/'+x.image_id+'?thumb=1':null}))}));
+   const quizQuestions=quizIds.length?(await c.query('SELECT quiz_id,id,ordinal,prompt,prompt_alt,points,layout,image_id FROM quiz_questions WHERE quiz_id=ANY($1::uuid[]) ORDER BY quiz_id,ordinal',[quizIds])).rows:[];
+   quizzes=quizRows.map(q=>({id:q.id,title:q.title,languagePrimary:q.language_primary,languageSecondary:q.language_secondary,updatedAt:q.updated_at,questions:quizQuestions.filter(x=>x.quiz_id===q.id).map(x=>({id:x.id,ordinal:x.ordinal,prompt:x.prompt,promptAlt:x.prompt_alt,points:x.points,layout:x.layout,imageId:x.image_id,imageUrl:x.image_id?'/api/images/'+x.image_id:null,thumbUrl:x.image_id?'/api/images/'+x.image_id+'?thumb=1':null}))}));
   }
-  const result={title:r.title,displayMode:displayModes.get(r.id)||r.display_mode||'scores',displayLanguage:displayLanguages.get(r.id)||r.display_language||'primary',games,activeGameId:activeGame?.id||null,game:game?{...game,questions:questions.map(q=>({...q,prompt:q.prompt,promptAlt:q.prompt_alt,imageId:q.image_id,imageUrl:q.image_id?'/api/images/'+q.image_id:null,thumbUrl:q.image_id?'/api/images/'+q.image_id+'?thumb=1':null,winners:awards.filter(a=>a.question_id===q.id).map(a=>({playerId:a.player_id,points:Number(a.points)}))}))}:null,players,...(includeQuizzes?{quizzes}:{}),revision:Number(r.revision)};
+  const result={title:r.title,displayMode:displayModes.get(r.id)||r.display_mode||'scores',displayLanguage:displayLanguages.get(r.id)||r.display_language||'primary',games,activeGameId:activeGame?.id||null,game:game?{...game,questions:questions.map(q=>({...q,prompt:q.prompt,promptAlt:q.prompt_alt,layout:q.layout,imageId:q.image_id,imageUrl:q.image_id?'/api/images/'+q.image_id:null,thumbUrl:q.image_id?'/api/images/'+q.image_id+'?thumb=1':null,winners:awards.filter(a=>a.question_id===q.id).map(a=>({playerId:a.player_id,points:Number(a.points)}))}))}:null,players,...(includeQuizzes?{quizzes}:{}),revision:Number(r.revision)};
   await c.query('COMMIT');return result;
  }catch(e){await c.query('ROLLBACK');throw e}
 }
 function sessionCookie(req,token,maxAge){
- return `scorescan_session=${token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${maxAge}${process.env.NODE_ENV==='production'||req.socket.encrypted?'; Secure':''}`;
+ const secure=process.env.NODE_ENV==='production'||req.socket.encrypted;
+ return `${secure?'__Host-':''}scorescan_session=${token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${maxAge}${secure?'; Secure':''}`;
 }
 async function savedSession(c,req,requiredRole){
- const token=/(?:^|;\s*)scorescan_session=([A-Za-z0-9_-]{43})(?:;|$)/.exec(req.headers.cookie||'')?.[1];
+ const secure=process.env.NODE_ENV==='production'||req.socket.encrypted;
+ const token=(secure?/(?:^|;\s*)__Host-scorescan_session=([A-Za-z0-9_-]{43})(?:;|$)/:/(?:^|;\s*)scorescan_session=([A-Za-z0-9_-]{43})(?:;|$)/).exec(req.headers.cookie||'')?.[1];
  if(!token)return null;
  return (await c.query(`SELECT r.*,s.id AS session_id,s.expires_at AS session_expires_at
   FROM host_sessions s JOIN rooms r ON r.id=s.room_id
@@ -232,14 +250,21 @@ async function ticketSession(c,ticket,role){
   JOIN rooms r ON r.id=s.room_id
   WHERE s.socket_role=$2 AND s.revoked_at IS NULL AND s.expires_at>now()`,[hmac('socket-ticket:'+ticket),role])).rows[0]||null;
 }
-async function loginLimited(c,keyHashes){
+async function loginThrottle(c,[pairKey,roomKey]){
  const rows=(await c.query(`INSERT INTO login_attempts(key_hash,attempts,expires_at)
   SELECT candidate,1,now()+interval '15 minutes' FROM unnest($1::bytea[]) AS hashes(candidate)
   ON CONFLICT(key_hash) DO UPDATE SET attempts=CASE WHEN login_attempts.expires_at<=now() THEN 1 ELSE login_attempts.attempts+1 END,
    expires_at=CASE WHEN login_attempts.expires_at<=now() THEN now()+interval '15 minutes' ELSE login_attempts.expires_at END
-  RETURNING key_hash,attempts`,[keyHashes])).rows;
- return rows.some(row=>(row.key_hash.equals(keyHashes[0])?LOGIN_CLIENT_LIMIT:LOGIN_ROOM_LIMIT)<row.attempts);
+  RETURNING key_hash,attempts`,[[pairKey,roomKey]])).rows;
+ let blocked=false,delayMs=0;
+ for(const row of rows){
+  if(row.key_hash.equals(pairKey)&&row.attempts>LOGIN_PAIR_LIMIT)blocked=true;
+  else if(row.key_hash.equals(roomKey)&&row.attempts>LOGIN_ROOM_DELAY_THRESHOLD)delayMs=Math.min(250*2**(row.attempts-LOGIN_ROOM_DELAY_THRESHOLD),8000);
+ }
+ return {blocked,delayMs};
 }
+const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+async function sessionCheck(req,role){const c=await db.connect();try{return await savedSession(c,req,role)}finally{c.release()}}
 async function sessionRequest(req,res){
  sec(res);
  if(!['GET','POST','DELETE'].includes(req.method)){res.writeHead(405);res.end('{"error":"method_not_allowed"}');return}
@@ -251,14 +276,17 @@ async function sessionRequest(req,res){
   body=await read(req);name=txt(body.roomName);
   if(!name){res.writeHead(400);res.end('{"error":"invalid_input"}');return}
   if(!strongPassword(body.secret,name)){res.writeHead(400);res.end('{"error":"weak_password"}');return}
-  if(limited(authBuckets,ip(req)+':'+name.toLowerCase(),8,15*60e3)){res.writeHead(429);res.end('{"error":"rate_limited"}');return}
-  loginKeys=[hmac('login-client:'+ip(req)),hmac('login-room:'+name.toLowerCase())];
+  if(limited(authBuckets,ip(req)+':'+name.toLowerCase(),LOGIN_PAIR_LIMIT,15*60e3)){res.writeHead(429);res.end('{"error":"rate_limited"}');return}
+  loginKeys=[hmac('login-pair:'+ip(req)+':'+name.toLowerCase()),hmac('login-room:'+name.toLowerCase())];
+  const pre=await db.connect();let throttle;
+  try{throttle=await loginThrottle(pre,loginKeys)}finally{pre.release()}
+  if(throttle.blocked){res.writeHead(429);res.end('{"error":"rate_limited"}');return}
+  if(throttle.delayMs)await sleep(throttle.delayMs);
  }
  const c=await db.connect();
  try{
   let room;
   if(req.method==='POST'){
-   if(await loginLimited(c,loginKeys)){res.writeHead(429);res.end('{"error":"rate_limited"}');return}
    room=(await c.query('SELECT * FROM rooms WHERE login_name=lower($1)',[name])).rows[0];
    const passwordMatches=await passOk(body.secret,room?.host_secret_hash||DUMMY_PASSWORD_HASH);
    if(!room||!passwordMatches){
@@ -298,12 +326,14 @@ async function rotatePassword(req,res,reqId){
  if(!name||typeof oldPassword!=='string'||oldPassword.length<16||oldPassword.length>128||!strongPassword(newPassword,name)){
   res.writeHead(400);res.end('{"error":"invalid_input"}');return;
  }
- const keys=[hmac('login-client:'+ip(req)),hmac('login-room:'+name.toLowerCase())];
+ const keys=[hmac('login-pair:'+ip(req)+':'+name.toLowerCase()),hmac('login-room:'+name.toLowerCase())];
+ const pre=await db.connect();let current,throttle;
+ try{current=await savedSession(pre,req,'host');if(current&&current.login_name===name.toLowerCase())throttle=await loginThrottle(pre,keys)}finally{pre.release()}
+ if(!current||current.login_name!==name.toLowerCase()){res.writeHead(401);res.end('{"error":"session_expired"}');return}
+ if(throttle.blocked){res.writeHead(429);res.end('{"error":"rate_limited"}');return}
+ if(throttle.delayMs)await sleep(throttle.delayMs);
  const c=await db.connect();let started=false;
  try{
-  const current=await savedSession(c,req,'host');
-  if(!current||current.login_name!==name.toLowerCase()){res.writeHead(401);res.end('{"error":"session_expired"}');return}
-  if(await loginLimited(c,keys)){res.writeHead(429);res.end('{"error":"rate_limited"}');return}
   await c.query('BEGIN');started=true;
   const room=(await c.query('SELECT * FROM rooms WHERE id=$1 FOR UPDATE',[current.id])).rows[0];
   if(!room||!await passOk(oldPassword,room.host_secret_hash))throw Error('credentials');
@@ -349,9 +379,9 @@ async function revokeAllSessions(req,res,reqId){
    LIMIT 0`);
   await c.query('SELECT display_mode,display_language FROM rooms LIMIT 0');
   await c.query('SELECT language_primary,language_secondary FROM quizzes LIMIT 0');
-  await c.query('SELECT prompt_alt FROM quiz_questions LIMIT 0');
+  await c.query('SELECT prompt_alt,layout FROM quiz_questions LIMIT 0');
   await c.query('SELECT language_primary,language_secondary FROM games LIMIT 0');
-  await c.query('SELECT prompt_alt FROM game_questions LIMIT 0');
+  await c.query('SELECT prompt_alt,layout FROM game_questions LIMIT 0');
  }
 async function createRoom(req,res,reqId){
  sec(res);
@@ -397,9 +427,10 @@ const server=http.createServer(async(req,res)=>{
   if(req.method==='POST'&&route==='/api/quizzes')return await quizSave(req,res,reqId);
   if(req.method==='DELETE'&&route.startsWith('/api/quizzes/'))return await quizDelete(req,res,reqId);
   if(req.method==='POST'&&route==='/api/rooms')return await createRoom(req,res,reqId);
-if(req.url==='/healthz'||req.url==='/readyz'){const c=await db.connect();try{if(req.url==='/readyz')await schemaReady(c);else await c.query('SELECT 1');sec(res);res.end('{"ok":true}')}catch(error){log('error','readiness_failed',{code:error.code||error.message});sec(res);res.writeHead(503);res.end('{"error":"schema_unavailable"}')}finally{c.release()}return}let u=req.url.split('?')[0];if(u==='/')u='/index.html';if(u==='/vendor/html5-qrcode.min.js'){u='/vendor.js';const src=path.join(__dirname,'node_modules/html5-qrcode/html5-qrcode.min.js');sec(res,'text/javascript; charset=utf-8');return fs.createReadStream(src).pipe(res)}const f=path.normalize(path.join(PUBLIC,u));if(!f.startsWith(PUBLIC)){sec(res);res.writeHead(403);return res.end()}const types={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.webmanifest':'application/manifest+json; charset=utf-8','.png':'image/png','.svg':'image/svg+xml'};sec(res,types[path.extname(f)]||'application/octet-stream');fs.stat(f,(e,s)=>{if(e||!s.isFile()){res.writeHead(404);res.end()}else fs.createReadStream(f).pipe(res)})}catch(e){log('error','http_error',{reqId,message:e.code||e.message});if(!res.headersSent)sec(res);const databaseUnavailable=/^(42|53|57)/.test(String(e.code||''))||['ECONNREFUSED','ETIMEDOUT','ENETUNREACH'].includes(e.code);
+if(req.url==='/healthz'||req.url==='/readyz'){const c=await db.connect();try{if(req.url==='/readyz')await schemaReady(c);else await c.query('SELECT 1');sec(res);res.end('{"ok":true}')}catch(error){log('error','readiness_failed',{code:error.code||error.message});sec(res);res.writeHead(503);res.end('{"error":"schema_unavailable"}')}finally{c.release()}return}let u=req.url.split('?')[0];if(u==='/')u='/index.html';if(u==='/vendor/html5-qrcode.min.js'){u='/vendor.js';const src=path.join(__dirname,'node_modules/html5-qrcode/html5-qrcode.min.js');sec(res,'text/javascript; charset=utf-8');const vendor=fs.createReadStream(src);vendor.on('error',error=>{log('error','vendor_read_failed',{message:error.message});if(!res.headersSent){res.writeHead(500);res.end()}else res.destroy()});return vendor.pipe(res)}const f=path.normalize(path.join(PUBLIC,u));if(!f.startsWith(PUBLIC+path.sep)){sec(res);res.writeHead(403);return res.end()}const types={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.webmanifest':'application/manifest+json; charset=utf-8','.png':'image/png','.svg':'image/svg+xml'};sec(res,types[path.extname(f)]||'application/octet-stream');fs.stat(f,(e,s)=>{if(e||!s.isFile()){res.writeHead(404);res.end()}else{const stream=fs.createReadStream(f);stream.on('error',error=>{log('warning','static_read_failed',{message:error.message});if(!res.headersSent){res.writeHead(404);res.end()}else res.destroy()});stream.pipe(res)}})}catch(e){log('error','http_error',{reqId,message:e.code||e.message});if(!res.headersSent)sec(res);const databaseUnavailable=/^(42|53|57)/.test(String(e.code||''))||['ECONNREFUSED','ETIMEDOUT','ENETUNREACH'].includes(e.code);
  const status=e.code==='23505'?409:e.code==='RESOURCE_BUSY'||databaseUnavailable?503:400;
  res.writeHead(status);res.end(status===503?'{"error":"temporarily_unavailable"}':'{"error":"request_failed"}')}});
+server.headersTimeout=10000;server.requestTimeout=180000;server.maxConnections=256;
 const wss=new WebSocketServer({noServer:true,maxPayload:16384,perMessageDeflate:false});server.on('upgrade',(req,sock,head)=>{const client=ip(req);if(!ORIGINS.includes(req.headers.origin)||limited(connections,client,8,60000)||new URL(req.url,'http://x').pathname!=='/ws'){sock.write('HTTP/1.1 403 Forbidden\r\n\r\n');return sock.destroy()}wss.handleUpgrade(req,sock,head,ws=>{ws.clientIp=client;wss.emit('connection',ws,req)})});
 async function auth(ws,m,req){
  if(m.type!=='auth'||!['host','display'].includes(m.role))throw Error('auth');
@@ -468,13 +499,13 @@ async function act(ws,m){
     if(!validUuid(quizId))throw Error('quiz');
     quiz=(await c.query('SELECT id,title,language_primary,language_secondary FROM quizzes WHERE room_id=$1 AND id=$2',[room.id,quizId])).rows[0];
     if(!quiz)throw Error('quiz');
-    quizQuestions=(await c.query('SELECT prompt,prompt_alt,points,image_id FROM quiz_questions WHERE quiz_id=$1 ORDER BY ordinal',[quizId])).rows;
+    quizQuestions=(await c.query('SELECT prompt,prompt_alt,points,layout,image_id FROM quiz_questions WHERE quiz_id=$1 ORDER BY ordinal',[quizId])).rows;
     if(!quizQuestions.length)throw Error('quiz_empty');
    }else if(points===null)throw Error('input');
    if((await c.query('SELECT 1 FROM games WHERE room_id=$1 AND ended_at IS NULL',[room.id])).rowCount)throw Error('game_running');
    if(quiz){
     const game=(await c.query('INSERT INTO games(room_id,points_per_question,quiz_id,quiz_title,language_primary,language_secondary,question_count) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING id',[room.id,quizQuestions[0].points,quiz.id,quiz.title,quiz.language_primary,quiz.language_secondary,quizQuestions.length])).rows[0];
-    for(let i=0;i<quizQuestions.length;i++)await c.query('INSERT INTO game_questions(game_id,ordinal,points,label,prompt,prompt_alt,image_id) VALUES($1,$2,$3,$4,$5,$6,$7)',[game.id,i+1,quizQuestions[i].points,'Vraag '+(i+1),quizQuestions[i].prompt,quizQuestions[i].prompt_alt,quizQuestions[i].image_id]);
+    for(let i=0;i<quizQuestions.length;i++)await c.query('INSERT INTO game_questions(game_id,ordinal,points,label,prompt,prompt_alt,layout,image_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8)',[game.id,i+1,quizQuestions[i].points,'Vraag '+(i+1),quizQuestions[i].prompt,quizQuestions[i].prompt_alt,quizQuestions[i].layout,quizQuestions[i].image_id]);
     ws.gameId=game.id;
    }else{
     const game=(await c.query('INSERT INTO games(room_id,points_per_question) VALUES($1,$2) RETURNING id',[room.id,points])).rows[0];
@@ -521,7 +552,7 @@ async function act(ws,m){
   await audit(c,room.id,ws.session,m.type,'ok',reqId,ws.req,{gameId:m.gameId,quizId:m.quizId,mode:m.mode,language:m.language,questionId:m.questionId,playerId:m.playerId,idempotencyKey:m.idempotencyKey});
   await c.query('COMMIT');
   if(result)ws.send(JSON.stringify(result));
-  for(const x of wss.clients)if(x.authed&&x.room?.id===room.id&&x.readyState===1){try{x.send(JSON.stringify({type:'state',state:await state(c,ws.roomSlug,x.gameId,x.role==='host')}))}catch(error){log('warning','state_send_failed',{reason:error.message})}}
+  for(const x of wss.clients)if(x.authed&&x.room?.id===room.id&&x.readyState===1){if(Date.now()>=x.sessionExpiresAt){x.close(4401,'authentication_expired');continue}try{x.send(JSON.stringify({type:'state',state:await state(c,ws.roomSlug,x.gameId,x.role==='host')}))}catch(error){log('warning','state_send_failed',{reason:error.message})}}
  }catch(e){
   await c.query('ROLLBACK');log('warning','action_rejected',{type:m.type,reason:e.code||e.message});
   const reasons=['input','player','game_running','no_active_game','stale_question','question_limit','question','duplicate_request','nothing','action','quiz','quiz_empty','quiz_finished','mode','language'];
@@ -549,4 +580,4 @@ wss.on('connection',(ws,req)=>{
  });
  ws.on('error',e=>log('warning','ws_error',{reason:e.message}));
  ws.on('close',()=>clearTimeout(timer));
-});setInterval(async()=>{try{await db.query("DELETE FROM host_sessions WHERE expires_at<now() OR revoked_at IS NOT NULL AND revoked_at<now()-interval '7 days'");await db.query("DELETE FROM socket_tickets WHERE expires_at<now()");await db.query("DELETE FROM login_attempts WHERE expires_at<now()");await db.query("DELETE FROM quiz_images i WHERE i.created_at<now()-interval '30 days' AND NOT EXISTS(SELECT 1 FROM quiz_questions q WHERE q.image_id=i.id) AND NOT EXISTS(SELECT 1 FROM game_questions g WHERE g.image_id=i.id)")}catch{}},3600000).unref();server.listen(PORT,()=>log('info','started',{port:PORT}));
+});setInterval(async()=>{for(const x of wss.clients)if(x.authed&&Date.now()>=x.sessionExpiresAt)x.close(4401,'authentication_expired');try{await db.query("DELETE FROM host_sessions WHERE expires_at<now() OR revoked_at IS NOT NULL AND revoked_at<now()-interval '7 days'");await db.query("DELETE FROM socket_tickets WHERE expires_at<now()");await db.query("DELETE FROM login_attempts WHERE expires_at<now()");await db.query("DELETE FROM quiz_images i WHERE i.created_at<now()-interval '30 days' AND NOT EXISTS(SELECT 1 FROM quiz_questions q WHERE q.image_id=i.id) AND NOT EXISTS(SELECT 1 FROM game_questions g WHERE g.image_id=i.id)");const roomIds=new Set((await db.query('SELECT id FROM rooms')).rows.map(r=>r.id));for(const map of[displayModes,displayLanguages])for(const key of map.keys())if(!roomIds.has(key))map.delete(key)}catch{}},3600000).unref();server.listen(PORT,()=>log('info','started',{port:PORT}));

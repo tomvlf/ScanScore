@@ -44,7 +44,7 @@ Winnaars worden per vraag bijgehouden. Hun aandeel is steeds de puntenpot van di
 Gestopte spellen worden bewaard voor het scorebord en zijn alleen-lezen. Historische score-events uit oudere versies worden bij de database-upgrade als onveranderbare historische spelresultaten bewaard.
 
 ## Back-up en herstel
-Maak een back-up met `./scripts/backup.sh`. Test herstel periodiek in een afzonderlijke database met `pg_restore --clean --if-exists`. Bewaar back-ups versleuteld buiten de host en definieer een passend RPO/RTO.
+Maak een back-up met `./scripts/backup.sh`; de dump wordt versleuteld met `BACKUP_PASSPHRASE` uit `.env` en krijgt een SHA-256-controlebestand. Test herstel maandelijks in een afzonderlijke database (zie de README voor het exacte `openssl`- en `pg_restore`-commando). Bewaar back-ups en de passphrase buiten de host en definieer een passend RPO/RTO. Auditgebeurtenissen worden na 90 dagen opgeruimd via `./scripts/retention.sh` (dagelijks inplannen); een hele ruimte verwijder je met `./scripts/purge-room.sh '<ruimtenaam>'`.
 
 ## Aanmelden
 De spelbediening en het scorescherm gebruiken dezelfde ruimtenaam en hetzelfde
@@ -65,7 +65,7 @@ te wijzigen.
 - Database zit uitsluitend op een intern Docker-netwerk en publiceert geen poort.
 - PostgreSQL gebruikt SCRAM-SHA-256 en time-outs.
 - Hostwachtwoorden gebruiken scrypt + unieke salt + server-pepper.
-- Nieuwe ruimtes vereisen minstens 16 tekens; loginpogingen worden persistent begrensd per client en ruimte.
+- Nieuwe ruimtes vereisen minstens 16 tekens; loginpogingen worden persistent begrensd per client-en-ruimtecombinatie. Veel mislukte pogingen van verschillende clients vertragen de ruimte tijdelijk (max. 8 s) in plaats van ze te blokkeren.
 - Sessies bevatten een niet-opwaardeerbare `host`- of `display`-rol; muterende HTTP-routes vereisen `host`.
 - WebSocket-tickets zijn rolgebonden, gehasht opgeslagen, eenmalig bruikbaar en 30 seconden geldig.
 - Per ruimte blijven maximaal 12 actieve sessies; oudere sessies worden ingetrokken.

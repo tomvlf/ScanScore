@@ -84,6 +84,8 @@ function application({production=false,trustProxyHops=0}={}){
  });
  vm.runInContext(source,context);
  return {
+  context,
+  client,
   sessions,
   tickets,
   attempts,
@@ -176,6 +178,9 @@ test('persistent cookie restores both screens and logout revokes future access',
  const cookie=login.headers['set-cookie'];
  assert.match(cookie,/HttpOnly; SameSite=Strict; Max-Age=86400/);
  assert.match(cookie,/; Secure$/);
+ assert.match(cookie,/^__Host-scorescan_session=/);
+ const tossed=cookie.replace('__Host-scorescan_session=','scorescan_session=');
+ assert.equal((await app.request('GET','/api/session?role=host',{}, {cookie:tossed})).statusCode,401);
  assert.ok(!JSON.stringify(login.body).includes(hostSecret));
  assert.ok(!cookie.includes(hostSecret));
  const restored=await app.request('GET','/api/session?role=host',{}, {cookie});
@@ -249,11 +254,26 @@ test('session login rejects wrong passwords and cross-origin login or logout',as
 });
 
 test('database login limits throttle brute force attempts independently of socket limits',async()=>{
- const app=application(),hostSecret='a long host password';
+ const app=application({trustProxyHops:1}),hostSecret='a long host password';
  await app.create({roomName:'Family Quiz',hostSecret});
- for(let i=0;i<8;i++)assert.equal((await app.signIn('Family Quiz','incorrect password','host')).statusCode,401);
- assert.equal((await app.signIn('Family Quiz','incorrect password','host')).statusCode,429);
+ const attacker={'x-forwarded-for':'198.51.100.1'};
+ for(let i=0;i<8;i++)assert.equal((await app.request('POST','/api/session?role=host',{roomName:'Family Quiz',secret:'incorrect password'},attacker)).statusCode,401);
+ assert.equal((await app.request('POST','/api/session?role=host',{roomName:'Family Quiz',secret:'incorrect password'},attacker)).statusCode,429);
  assert.ok([...app.attempts.values()].some(entry=>entry.attempts>=8));
+ assert.equal((await app.signIn('Family Quiz',hostSecret,'host')).statusCode,200,'a different client must not be locked out of the room');
+});
+
+test('distributed login failures delay the room instead of locking it out',async()=>{
+ const app=application(),h=app.context.hmac,roomKey=h('login-room:family quiz');
+ let result;
+ for(let i=0;i<40;i++)result=await app.context.loginThrottle(app.client,[h('login-pair:198.51.100.'+i+':family quiz'),roomKey]);
+ assert.equal(result.blocked,false,'room-wide failures must not hard-lock the room');
+ assert.equal(result.delayMs,8000,'progressive delay caps at 8 seconds');
+ const pairKey=h('login-pair:192.0.2.1:family quiz');
+ let pair;
+ for(let i=0;i<9;i++)pair=await app.context.loginThrottle(app.client,[pairKey,h('login-room:other room')]);
+ assert.equal(pair.blocked,true,'a single abusive client is still hard-blocked');
+ assert.equal(pair.delayMs,0);
 });
 
 test('password rotation revokes every room session and issues a fresh host session',async()=>{

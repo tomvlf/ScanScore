@@ -17,14 +17,32 @@ async function denied(sql){try{await client.query(sql);throw new Error(`Unexpect
  has_table_privilege(current_user,'rooms','DELETE') delete_rooms,
  has_table_privilege(current_user,'rooms','TRUNCATE') truncate_rooms,
  has_table_privilege(current_user,'rooms','REFERENCES') references_rooms,
- has_table_privilege(current_user,'rooms','TRIGGER') trigger_rooms`)).rows[0];
- for(const k of ['connect','usage','select_rooms','insert_rooms','update_rooms','delete_rooms'])assert.equal(checks[k],true,`${k} should be true`);
- for(const k of ['create_schema','truncate_rooms','references_rooms','trigger_rooms'])assert.equal(checks[k],false,`${k} should be false`);
+ has_table_privilege(current_user,'rooms','TRIGGER') trigger_rooms,
+ has_table_privilege(current_user,'audit_events','INSERT') insert_audit,
+ has_table_privilege(current_user,'audit_events','SELECT') select_audit,
+ has_table_privilege(current_user,'audit_events','UPDATE') update_audit,
+ has_table_privilege(current_user,'audit_events','DELETE') delete_audit,
+ has_table_privilege(current_user,'game_questions','UPDATE') update_game_questions,
+ has_table_privilege(current_user,'game_questions','DELETE') delete_game_questions,
+ has_table_privilege(current_user,'quiz_questions','UPDATE') update_quiz_questions,
+ has_table_privilege(current_user,'question_winners','UPDATE') update_winners,
+ has_table_privilege(current_user,'game_scans','UPDATE') update_scans,
+ has_table_privilege(current_user,'game_scans','DELETE') delete_scans,
+ has_table_privilege(current_user,'socket_tickets','UPDATE') update_tickets,
+ has_table_privilege(current_user,'rounds','SELECT') select_rounds,
+ has_table_privilege(current_user,'score_events','SELECT') select_score_events`)).rows[0];
+ for(const k of ['connect','usage','select_rooms','insert_rooms','update_rooms','insert_audit'])assert.equal(checks[k],true,`${k} should be true`);
+ for(const k of ['create_schema','truncate_rooms','references_rooms','trigger_rooms','delete_rooms','select_audit','update_audit','delete_audit','update_game_questions','delete_game_questions','update_quiz_questions','update_winners','update_scans','delete_scans','update_tickets','select_rounds','select_score_events'])assert.equal(checks[k],false,`${k} should be false`);
  await client.query('BEGIN');await client.query("INSERT INTO audit_events(severity,event_type,outcome,correlation_id,metadata) VALUES('info','runtime_privilege_test','ok',gen_random_uuid(),'{}')");await client.query('ROLLBACK');
  await denied('CREATE TABLE runtime_forbidden(id integer)');
  await denied('TRUNCATE rooms');
  await denied('ALTER TABLE rooms ADD COLUMN runtime_forbidden integer');
  await denied('DROP TABLE rooms');
+ await denied('SELECT * FROM audit_events');
+ await denied("UPDATE audit_events SET outcome='tampered'");
+ await denied('DELETE FROM audit_events');
+ await denied('DELETE FROM rooms');
+ await denied('SELECT * FROM rounds');
  const attrs=(await client.query("select rolsuper,rolcreatedb,rolcreaterole,rolreplication,rolbypassrls,rolconnlimit from pg_roles where rolname=current_user")).rows[0];
  for(const k of ['rolsuper','rolcreatedb','rolcreaterole','rolreplication','rolbypassrls'])assert.equal(attrs[k],false,`${k} should be false`);assert.equal(attrs.rolconnlimit,20);
  console.log('Runtime privilege integration test passed');

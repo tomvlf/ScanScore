@@ -5,6 +5,8 @@ secrets/
 backups/
 *.dump
 *.dump.sha256
+*.dump.enc
+*.dump.enc.sha256
 node_modules/
 coverage/
 npm-debug.log*

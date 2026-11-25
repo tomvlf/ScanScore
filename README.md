@@ -260,9 +260,12 @@ De aanmelding gebruikt een intrekbare `Secure`, `HttpOnly`-cookie. Het wachtwoor
 wordt alleen via HTTPS naar de loginroute verstuurd en niet in browseropslag
 of over de WebSocket verstuurd. Na de HTTPS-login ontvangt de browser een
 rollen- en sessiegebonden ticket van 30 seconden dat exact één keer gebruikt kan
-worden om de WebSocket te openen. Loginpogingen worden per client en ruimte
-databasegewijs begrensd, zodat herstarten of meerdere app-instanties de limiet
-niet resetten. **Afmelden** trekt deze browsersessie en alle open tickets in.
+worden om de WebSocket te openen. Loginpogingen worden per client-en-ruimte-
+combinatie databasegewijs begrensd, zodat herstarten of meerdere app-instanties
+de limiet niet resetten. Veel mislukte pogingen van verschillende clients samen
+vertragen de ruimte tijdelijk (oplopend tot 8 seconden) in plaats van ze te
+blokkeren, zodat een echte quizmaster ook tijdens een aanval kan blijven
+aanmelden. **Afmelden** trekt deze browsersessie en alle open tickets in.
 Gebruik dit op gedeelde apparaten; privévensters en het wissen van cookies kunnen
 de aanmelding eerder verwijderen.
 
@@ -383,15 +386,37 @@ via `postgres-init/003-schema.sql`.
 ./scripts/backup.sh
 ```
 
-Het script maakt een PostgreSQL-dump en een SHA-256-controlebestand in `backups/`.
-Quizafbeeldingen zitten in de database en worden dus mee in de dump bewaard.
+Het script maakt een PostgreSQL-dump, versleutelt die met AES-256 (openssl,
+PBKDF2, 600.000 iteraties) en bewaart een SHA-256-controlebestand in `backups/`
+(mapmodus `700`, bestanden `600`). Quizafbeeldingen zitten in de database en
+worden dus mee in de dump bewaard. Versleuteling gebruikt `BACKUP_PASSPHRASE`
+uit `.env`; bewaar die passphrase apart van de back-ups, anders is herstel
+onmogelijk.
+
+Herstel een back-up:
+
+```bash
+openssl enc -d -aes-256-cbc -pbkdf2 -iter 600000 -pass env:BACKUP_PASSPHRASE \
+  -in backups/scanscore-<stempel>.dump.enc -out /tmp/restore.dump
+docker compose exec -T db sh -ec 'PGPASSWORD="$POSTGRES_PASSWORD" exec pg_restore -U scanscore_owner -d scanscore --clean --if-exists --no-owner --no-acl' < /tmp/restore.dump
+```
 
 Voor productiegebruik:
 
-- kopieer back-ups versleuteld naar een andere machine of opslagdienst;
+- kopieer back-ups naar een andere machine of opslagdienst;
 - controleer of geplande back-ups werkelijk slagen;
-- test periodiek een herstel in een afzonderlijke database;
-- bewaar de server-pepper en QR-encryptiesleutel eveneens buiten de server.
+- test maandelijks een herstel in een afzonderlijke database;
+- bewaar de server-pepper, QR-encryptiesleutel en back-uppassphrase eveneens buiten de server.
+
+## Bewaartermijnen en privacy
+
+- Auditgebeurtenissen worden bewaard gedurende 90 dagen. Plan dagelijks
+  `./scripts/retention.sh` via cron op de host; de app-databaserol kan
+  auditrijen alleen toevoegen, nooit wissen of wijzigen.
+- Een volledige ruimte met alle deelnemers, spellen, quizzen en afbeeldingen
+  verwijder je met `./scripts/purge-room.sh '<ruimtenaam>'`. Auditrijen blijven
+  geanonimiseerd (zonder ruimteverwijzing) bewaard tot de bewaartermijn
+  verstrijkt.
 
 ## Status en logs
 

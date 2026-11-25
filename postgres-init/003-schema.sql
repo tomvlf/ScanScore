@@ -136,6 +136,7 @@ CREATE TABLE quiz_questions(
  ordinal integer NOT NULL CHECK(ordinal BETWEEN 1 AND 10000),
  prompt varchar(500) NOT NULL CHECK(length(btrim(prompt)) BETWEEN 1 AND 500),
  prompt_alt varchar(500) CHECK(prompt_alt IS NULL OR length(btrim(prompt_alt)) BETWEEN 1 AND 500),
+ layout varchar(12) NOT NULL DEFAULT 'stacked' CHECK(layout IN ('stacked','split','overlay','text')),
  points integer NOT NULL CHECK(points BETWEEN 1 AND 1000000),
  image_id uuid NOT NULL REFERENCES quiz_images(id) ON DELETE RESTRICT,
  UNIQUE(quiz_id,ordinal)
@@ -168,6 +169,7 @@ CREATE TABLE game_questions(
  label varchar(100),
  prompt varchar(500),
  prompt_alt varchar(500),
+ layout varchar(12) CHECK(layout IN ('stacked','split','overlay','text')),
  image_id uuid REFERENCES quiz_images(id) ON DELETE RESTRICT,
  UNIQUE(game_id,ordinal)
 );
@@ -195,9 +197,17 @@ CREATE INDEX quiz_questions_image ON quiz_questions(image_id);
 
 REVOKE ALL ON ALL TABLES IN SCHEMA public FROM PUBLIC;
 REVOKE ALL ON ALL TABLES IN SCHEMA public FROM scanscore_runtime;
-GRANT SELECT,INSERT,UPDATE,DELETE ON
- rooms,rounds,players,score_events,host_sessions,socket_tickets,login_attempts,
- audit_events,quiz_images,quizzes,quiz_questions,games,game_questions,
- question_winners,game_scans
- TO scanscore_runtime;
+GRANT SELECT,INSERT,UPDATE ON rooms TO scanscore_runtime;
+GRANT SELECT,INSERT,UPDATE ON players TO scanscore_runtime;
+GRANT SELECT,INSERT,UPDATE,DELETE ON host_sessions TO scanscore_runtime;
+GRANT SELECT,INSERT,DELETE ON socket_tickets TO scanscore_runtime;
+GRANT SELECT,INSERT,UPDATE,DELETE ON login_attempts TO scanscore_runtime;
+GRANT INSERT ON audit_events TO scanscore_runtime;
+GRANT SELECT,INSERT,UPDATE,DELETE ON quiz_images TO scanscore_runtime;
+GRANT SELECT,INSERT,UPDATE,DELETE ON quizzes TO scanscore_runtime;
+GRANT SELECT,INSERT,DELETE ON quiz_questions TO scanscore_runtime;
+GRANT SELECT,INSERT,UPDATE ON games TO scanscore_runtime;
+GRANT SELECT,INSERT ON game_questions TO scanscore_runtime;
+GRANT SELECT,INSERT,DELETE ON question_winners TO scanscore_runtime;
+GRANT SELECT,INSERT ON game_scans TO scanscore_runtime;
 GRANT USAGE,SELECT ON SEQUENCE audit_events_id_seq TO scanscore_runtime;
