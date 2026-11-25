@@ -3,13 +3,80 @@ on:
   push:
     branches: [main]
     tags: ['v*.*.*']
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 permissions:
   contents: read
-  packages: write
 jobs:
-  publish:
+  validate:
+    name: container-security
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+      - name: Build image for security validation
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          load: true
+          push: false
+          tags: scanscore:scan
+          cache-from: type=gha,scope=container-scan
+          cache-to: type=gha,mode=max,scope=container-scan
+      - name: Verify hardened runtime configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          user="$(docker image inspect scanscore:scan --format '{{.Config.User}}')"
+          test -n "$user"
+          test "$user" != "root"
+          test "$user" != "0"
+          test -n "$(docker image inspect scanscore:scan --format '{{json .Config.Healthcheck}}')"
+      - name: Scan final image and show findings
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --rm \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            aquasec/trivy:0.76.2 image \
+            --skip-version-check \
+            --scanners vuln \
+            --severity HIGH,CRITICAL \
+            --ignore-unfixed \
+            --exit-code 0 \
+            --format table \
+            scanscore:scan
+          docker run --rm \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            -v "$PWD:/workspace" \
+            aquasec/trivy:0.76.2 image \
+            --skip-version-check \
+            --scanners vuln \
+            --severity HIGH,CRITICAL \
+            --ignore-unfixed \
+            --exit-code 1 \
+            --format json \
+            --output /workspace/trivy-image.json \
+            scanscore:scan
+      - name: Upload image scan report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-container-image
+          path: trivy-image.json
+          if-no-files-found: error
+          retention-days: 30
+
+  publish:
+    if: github.event_name != 'pull_request'
+    needs: validate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
     steps:
       - uses: actions/checkout@v7
       - uses: docker/setup-qemu-action@v4
@@ -30,14 +97,15 @@ jobs:
             type=raw,value=1.0.${{ github.run_number }}
             type=sha,format=long
             type=raw,value=latest,enable={{is_default_branch}}
-      - uses: docker/build-push-action@v7
+      - name: Publish scanned source revision
+        uses: docker/build-push-action@v7
         with:
           context: .
           push: true
           platforms: linux/amd64,linux/arm64
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          provenance: true
+          cache-from: type=gha,scope=container-publish
+          cache-to: type=gha,mode=max,scope=container-publish
+          provenance: mode=max
           sbom: true

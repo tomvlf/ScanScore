@@ -6,7 +6,10 @@ secrets
 backups
 node_modules
 coverage
+test
+scripts
+postgres-init
 *.dump
 *.dump.sha256
 *.md
-!README.md
+compose*.yml
