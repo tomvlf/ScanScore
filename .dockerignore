@@ -8,6 +8,7 @@ node_modules
 coverage
 test
 scripts
+!scripts/schema-upgrades
 postgres-init
 *.dump
 *.dump.sha256

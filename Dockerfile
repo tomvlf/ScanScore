@@ -23,6 +23,8 @@ RUN apk upgrade --no-cache \
 COPY --from=dependencies --chown=1001:1001 /app/node_modules ./node_modules
 COPY --chown=1001:1001 package.json package-lock.json server.js ./
 COPY --chown=1001:1001 public ./public
+# Idempotent upgrades for a one-shot schema-upgrade service that runs this image with owner credentials.
+COPY --chown=1001:1001 scripts/schema-upgrades ./scripts/schema-upgrades
 
 USER 1001:1001
 EXPOSE 8080

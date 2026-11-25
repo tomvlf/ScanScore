@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- De image bevat nu `scripts/schema-upgrades/`, zodat een `schema-upgrade`-service die de app-image gebruikt bestaande databases kan bijwerken (o.a. kolom `layout`).
 - Beveiligingshardening fase 1: strikte statische-bestandscontrole, `__Host-`-sessiecookie in productie, aparte limiet voor afbeeldinglezen, verlopen sessies krijgen geen WebSocket-updates meer, foutafhandeling voor streams en vaste server-time-outs.
 - Beveiligingshardening fase 2: loginlimiet per client-en-ruimtecombinatie; veel mislukte pogingen van verschillende clients vertragen de ruimte (max. 8 s) in plaats van ze te blokkeren. Request bodies worden gelezen zonder databaseconnectie vast te houden, met maximaal zes gelijktijdige afbeeldinguploads; twee gelijktijdige scrypt-bewerkingen met queue-logging.
 - Beveiligingshardening fase 3: database-rechten van de app-role versmald tot wat de server gebruikt; auditlog is append-only. Back-ups worden versleuteld met een aparte passphrase; bewaartermijn van 90 dagen voor auditgebeurtenissen (`scripts/retention.sh`) en een purge-script per ruimte (`scripts/purge-room.sh`).
