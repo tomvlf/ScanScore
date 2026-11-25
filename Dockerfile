@@ -1,5 +1,6 @@
 FROM node:26-alpine AS dependencies
 WORKDIR /app
+RUN apk upgrade --no-cache
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev \
     && npm cache clean --force
@@ -8,7 +9,8 @@ FROM node:26-alpine AS runtime
 ENV NODE_ENV=production
 WORKDIR /app
 
-RUN addgroup -S -g 1001 app \
+RUN apk upgrade --no-cache \
+    && addgroup -S -g 1001 app \
     && adduser -S -D -H -u 1001 -G app app
 
 COPY --from=dependencies --chown=1001:1001 /app/node_modules ./node_modules

@@ -35,13 +35,25 @@ jobs:
           test "$user" != "root"
           test "$user" != "0"
           test -n "$(docker image inspect scanscore:scan --format '{{json .Config.Healthcheck}}')"
-      - name: Scan final image for high and critical vulnerabilities
+      - name: Scan final image and show findings
         shell: bash
         run: |
+          set -euo pipefail
+          docker run --rm \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            aquasec/trivy:0.76.2 image \
+            --skip-version-check \
+            --scanners vuln \
+            --severity HIGH,CRITICAL \
+            --ignore-unfixed \
+            --exit-code 0 \
+            --format table \
+            scanscore:scan
           docker run --rm \
             -v /var/run/docker.sock:/var/run/docker.sock \
             -v "$PWD:/workspace" \
-            aquasec/trivy:0.67.2 image \
+            aquasec/trivy:0.76.2 image \
+            --skip-version-check \
             --scanners vuln \
             --severity HIGH,CRITICAL \
             --ignore-unfixed \
